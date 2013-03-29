@@ -1,0 +1,59 @@
+Two pieces (server/client) connected by TOR
+
+Important (anonymity and security):
+* No central server
+* No user identification
+* No institution identification
+* Keep things stupid simple
+
+Piece 1 (Server):
+    Servers offer a single directory where they contribute files for
+    download.  Only research publications.
+
+    Server periodically checks filesystem timestamp to see if there are new
+    files.
+
+    Server identifies files based on DOI, title and authors.
+    This is the only WRITE-only data operation that the server does.
+    Info is saved in a sqlite3 database.
+
+    Server requests to be added to the network
+    Follow a similar model as bitcoin for locating other peers to communicate
+    with.
+
+    Servers limit how much data they send per day/week/month.  If their cap has
+    been reached, the server is turned off.
+
+
+Piece 2 (Client):
+    Clients request that they want a paper.
+
+    Must have some paper (Title) to DOI conversion mechanism.
+
+    Client software has a list of servers.
+
+    Request goes out to a single server.  That server spawns off more requests.
+    If the client gets a response, it blocks all other responses, and the paper
+    is theirs.
+
+
+Glue:
+    This all works on a very simple (custom) protocol that can operate over
+    udp/tcp.  
+
+
+Future:
+    If a paper cannot be found.  Allow servers who have a university proxy to
+    download papers based on a request.
+
+Language:
+    C, C++, Go, Python
+    Hosted on github (or private bitbucket until public beta).
+    NO DEPENDENCIES (or as few as possible).  
+    If we use a compiled language
+
+Platform:
+    agnostic
+
+Secure:
+    No writing to the file system, except to a sqlite database
