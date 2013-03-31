@@ -7,5 +7,8 @@ $(APP): main.c
 test: $(APP)
 	./$(APP) -e "foo" test.pdf
 
+debug: $(APP)
+	exec gdb --args ./$(APP) -e "foo" test.pdf
+
 clean:
 	$(RM) -fv $(APP)

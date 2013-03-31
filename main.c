@@ -30,96 +30,192 @@
     }
 
 
+/* Entry for a cross reference table */
+typedef struct {size_t offset; size_t state;} xref_entry_t;
+
+
+/* Cross reference table */
+typedef struct {
+    int           n_entries;
+    xref_entry_t *entries;
+    size_t        root_idx;
+} xref_t;
+
+
+/* Data type: Contains a pointer to the raw pdf data */
+typedef struct {
+    const char   *data;
+    size_t        len;
+    int           ver_major, ver_minor;
+    int           n_xrefs;
+    xref_t      **xrefs;
+}pdf_t;
+
+
+/* Iterator type: Index into data */
+typedef struct {ssize_t idx; const pdf_t *pdf;} iter_t;
+#define ITR_VAL(_itr)       _itr->pdf->data[_itr->idx]
+#define ITR_VAL_INT(_itr)   atoll(_itr->pdf->data + _itr->idx)
+#define ITR_VAL_STR(_itr)   (char *)(_itr->pdf->data + _itr->idx)
+#define ITR_IN_BOUNDS(_itr) ((_itr->idx>-1 && (_itr->idx < _itr->pdf->len)))
+
+
 static void usage(const char *execname)
 {
     printf("Usage: %s <file> <-e regexp>\n", execname);
     exit(EXIT_SUCCESS);
 }
 
-typedef struct {const char *data; size_t len;} data_t;
-static void get_version(const data_t *d, int *major, int *minor)
+
+static void get_version(pdf_t *pdf)
 {
-    ERR(sscanf(d->data, "%%PDF-%d.%d", major, minor), !=2,
+    ERR(sscanf(pdf->data,"%%PDF-%d.%d",&pdf->ver_major,&pdf->ver_minor), !=2,
         "Bad version string");
 }
 
 
-static void seek_previous_line(FILE *fp)
+static inline void iter_prev(iter_t *itr)
 {
-    char c;
-    
-    while ((c=fgetc(fp)) && (c != '\n' && c != '\r'))
-      fseek(fp, -2, SEEK_CUR);
-    fseek(fp, -1, SEEK_CUR);
+    --itr->idx;
+}
 
-    while ((c=fgetc(fp)) && (c == '\n' || c == '\r'))
-      fseek(fp, -2, SEEK_CUR);
-    ungetc(c, fp);
 
-    while ((c=fgetc(fp)) && (c != '\n' && c != '\r'))
-      fseek(fp, -2, SEEK_CUR);
-    fseek(fp, 0, SEEK_CUR);
+static inline void iter_next(iter_t *itr)
+{
+    ++itr->idx;
+}
+
+
+/* Keep moving backwards until we hit 'match' */
+static void find_next(iter_t *itr, char match)
+{
+    /* If we are already on the character, backup one */
+    if (ITR_IN_BOUNDS(itr) && ITR_VAL(itr) == match)
+      iter_next(itr);
+
+    while (ITR_IN_BOUNDS(itr) && ITR_VAL(itr) != match)
+      iter_next(itr);
+}
+
+
+/* Keep moving backwards until we hit 'match' */
+static void find_prev(iter_t *itr, char match)
+{
+    /* If we are already on the character, backup one */
+    if (ITR_IN_BOUNDS(itr) && ITR_VAL(itr) == match)
+      iter_prev(itr);
+
+    while (ITR_IN_BOUNDS(itr) && ITR_VAL(itr) != match)
+      iter_prev(itr);
+}
+
+
+static void seek_previous_line(iter_t *itr)
+{
+    find_prev(itr, '\n'); /* Rewind to this line's start */
+    find_prev(itr, '\n'); /* Beginning of previous line  */
+    iter_next(itr);
+}
+
+
+static void seek_next_line(iter_t *itr)
+{
+    find_next(itr, '\n');
+    iter_next(itr);
 }
 
 
 static void find_string_reverse(FILE *fp, const char *match)
 {
-    char *st, buf[1024];
-
-    while (ftell(fp) != 0)
-    {
-        seek_previous_line(fp);
-        fgets(buf, sizeof(buf), fp);
-        if ((st = strstr(buf, match)))
-          break;
-    }
 }
 
 
-static const char *find_reverse(const char *data, char c)
+
+static iter_t *new_iter(const pdf_t *pdf, ssize_t start_offset)
 {
-    while (*data != c && offset > 0)
-    {
-        --data;
-        --offset;
-    }
-    return data;
+    iter_t *itr = malloc(sizeof(iter_t));
+    if (start_offset == -1)
+      itr->idx = pdf->len - 1;
+    else
+      itr->idx = start_offset;
+
+    itr->pdf = pdf;
+
+    if (!ITR_IN_BOUNDS(itr))
+      abort();
+
+    return itr;
 }
 
 
-static iter_t *new_iter(data_t *d, 
-
-
-static void get_trailer(const data_t *d)
+static void destroy_iter(iter_t *itr)
 {
-    const char *c;
+    free(itr);
+}
+
+
+static void set_iter(iter_t *itr, size_t offset)
+{
+    itr->idx = offset;
+    if (!ITR_IN_BOUNDS(itr))
+      abort();
+}
+
+
+static void get_xref(iter_t *itr)
+{
+    size_t i, first_obj, n_entries, offset, state;
+
+    seek_next_line(itr);
+    first_obj = ITR_VAL_INT(itr);
+    find_next(itr, ' ');
+    n_entries = ITR_VAL_INT(itr);
+    D("xref starts at object %lu and contains %lu entries",
+      first_obj, n_entries);
+
+    for (i=0; i<n_entries; ++i)
+    {
+        seek_next_line(itr);
+        offset = ITR_VAL_INT(itr);
+        find_next(itr, ' ');
+        state = ITR_VAL_INT(itr);
+        D("    Offset %lu State %lu", offset, state);
+    }
+
+    /* Get trailer */
+    seek_next_line(itr);
+    ERR(strncmp("trailer", ITR_VAL_STR(itr), strlen("trailer")), !=0,
+        "Could not locate trailer");
+}
+
+
+static void get_initial_xref(const pdf_t *pdf)
+{
+    size_t xref;
+    iter_t *itr;
 
     /* Skip end of lines at the end of the file */
-    iter = new_iter(data, -1);
-    iter = find_reverse(iter,d->data + d->len, '%');
-    iter = find_reverse(c, '%');
+    itr = new_iter(pdf, -1);
+    find_prev(itr, '%');
+    find_prev(itr, '%');
 
-//    ERR(fread(buf, 1, sizeof(buf), fp), ==0, "Reading EOF");
-//    ERR(strncmp("%%EOF", buf, 5), !=0, "Could not locate EOF");
-//
-//    /* Get xref offset */
-//    fseek(fp, -5, SEEK_CUR);
-//    seek_previous_line(fp);
-//    ERR(fgets(buf, sizeof(buf), fp), ==0, "Locating xref offset");
-//    fseek(fp, -strlen(buf)-2, SEEK_CUR);
-//    xset = atoi(buf);
-//    D("Initial xref table located at offset %d", xset);
-//
-//    /* Get startxref */
-//    ERR(fgets(buf, sizeof(buf), fp), ==0, "Locating startxref");
-//    find_string_reverse(fp, "trailer");
+    /* Get xref offset */
+    seek_previous_line(itr);
+    xref = ITR_VAL_INT(itr);
+    D("Initial xref table located at offset %lu", xref);
+
+    /* Get xref */
+    set_iter(itr, xref);
+    get_xref(itr);
+
+    destroy_iter(itr);
 }
 
 
 int main(int argc, char **argv)
 {
-    int i, fd, maj, min;
-    data_t d;
+    int i, fd;
+    pdf_t pdf;
     struct stat stat;
     const char *fname = NULL, *expr = NULL;
 
@@ -150,15 +246,19 @@ int main(int argc, char **argv)
     /* Open and map the file into memory */
     ERR((fd = open(fname, O_RDONLY)), ==-1, "Opening file '%s'", fname);
     ERR(fstat(fd, &stat), ==-1, "Obtaining file size");
-    ERR((d.data=mmap(NULL, stat.st_size, PROT_READ, MAP_PRIVATE, fd, 0)),==NULL,
+    ERR((pdf.data=mmap(NULL, stat.st_size, PROT_READ, MAP_PRIVATE, fd, 0)),==NULL,
         "Mapping file into memory");
-    d.len = stat.st_size;
-                   
-    get_version(&d, &maj, &min);
-    D("PDF Version: %d.%d", maj, min);
+    pdf.len = stat.st_size;
 
-    //get_trailer(fp);
+    /* Get pdf version info */
+    get_version(&pdf);
+    D("PDF Version: %d.%d", pdf.ver_major, pdf.ver_minor);
 
+    /* Get the initial cross reference table */
+    get_initial_xref(&pdf);
+
+    /* Clean up */
     close(fd);
+
     return 0;
 }
