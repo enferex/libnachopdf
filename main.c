@@ -125,12 +125,6 @@ static void seek_next_line(iter_t *itr)
 }
 
 
-static void find_string_reverse(FILE *fp, const char *match)
-{
-}
-
-
-
 static iter_t *new_iter(const pdf_t *pdf, ssize_t start_offset)
 {
     iter_t *itr = malloc(sizeof(iter_t));
@@ -162,9 +156,10 @@ static void set_iter(iter_t *itr, size_t offset)
 }
 
 
-static void get_xref(iter_t *itr)
+static void get_xref(pdf_t *pdf, iter_t *itr)
 {
-    size_t i, first_obj, n_entries, offset, state;
+    size_t i, first_obj, n_entries;
+    xref_t *xref;
 
     seek_next_line(itr);
     first_obj = ITR_VAL_INT(itr);
@@ -173,13 +168,21 @@ static void get_xref(iter_t *itr)
     D("xref starts at object %lu and contains %lu entries",
       first_obj, n_entries);
 
+    /* Create a blank xref */
+    if (!pdf->xrefs)
+      pdf->xrefs = malloc(sizeof(xref_t *));
+    xref = pdf->xrefs[pdf->n_xrefs] = malloc(sizeof(xref_t));
+    ++pdf->n_xrefs;
+
+    /* Add the entries */
+    xref->entries = malloc(sizeof(xref_entry_t) * n_entries);
+    xref->n_entries = n_entries;
     for (i=0; i<n_entries; ++i)
     {
         seek_next_line(itr);
-        offset = ITR_VAL_INT(itr);
+        xref->entries[i].offset = ITR_VAL_INT(itr);
         find_next(itr, ' ');
-        state = ITR_VAL_INT(itr);
-        D("    Offset %lu State %lu", offset, state);
+        xref->entries[i].state = ITR_VAL_INT(itr);
     }
 
     /* Get trailer */
@@ -189,7 +192,7 @@ static void get_xref(iter_t *itr)
 }
 
 
-static void get_initial_xref(const pdf_t *pdf)
+static void get_initial_xref(pdf_t *pdf)
 {
     size_t xref;
     iter_t *itr;
@@ -206,7 +209,7 @@ static void get_initial_xref(const pdf_t *pdf)
 
     /* Get xref */
     set_iter(itr, xref);
-    get_xref(itr);
+    get_xref(pdf, itr);
 
     destroy_iter(itr);
 }
@@ -242,6 +245,9 @@ int main(int argc, char **argv)
 
     D("File: %s", fname);
     D("Expr: %s", expr);
+   
+    /* New pdf */ 
+    memset(&pdf, 0, sizeof(pdf_t));
 
     /* Open and map the file into memory */
     ERR((fd = open(fname, O_RDONLY)), ==-1, "Opening file '%s'", fname);
