@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include <stdbool.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <unistd.h>
@@ -30,15 +31,22 @@
     }
 
 
+/* Use this for all offsets */
+#ifndef __off_t_defined
+typedef unsigned long long off_t;
+#endif
+#define NOT_FOUND false
+
+
 /* Entry for a cross reference table */
-typedef struct {size_t offset; size_t state;} xref_entry_t;
+typedef struct {off_t offset; off_t generation; char is_free;} xref_entry_t;
 
 
 /* Cross reference table */
 typedef struct {
     int           n_entries;
     xref_entry_t *entries;
-    size_t        root_idx;
+    off_t        root_obj;
 } xref_t;
 
 
@@ -53,10 +61,12 @@ typedef struct {
 
 
 /* Iterator type: Index into data */
-typedef struct {ssize_t idx; const pdf_t *pdf;} iter_t;
+typedef struct {off_t idx; const pdf_t *pdf;} iter_t;
 #define ITR_VAL(_itr)       _itr->pdf->data[_itr->idx]
 #define ITR_VAL_INT(_itr)   atoll(_itr->pdf->data + _itr->idx)
 #define ITR_VAL_STR(_itr)   (char *)(_itr->pdf->data + _itr->idx)
+#define ITR_POS(_itr)       _itr->idx
+#define ITR_ADDR(_itr)      (_itr->pdf->data + _itr->idx)
 #define ITR_IN_BOUNDS(_itr) ((_itr->idx>-1 && (_itr->idx < _itr->pdf->len)))
 
 
@@ -87,7 +97,7 @@ static inline void iter_next(iter_t *itr)
 
 
 /* Keep moving backwards until we hit 'match' */
-static void find_next(iter_t *itr, char match)
+static void seek_next(iter_t *itr, char match)
 {
     /* If we are already on the character, backup one */
     if (ITR_IN_BOUNDS(itr) && ITR_VAL(itr) == match)
@@ -120,12 +130,12 @@ static void seek_previous_line(iter_t *itr)
 
 static void seek_next_line(iter_t *itr)
 {
-    find_next(itr, '\n');
+    seek_next(itr, '\n');
     iter_next(itr);
 }
 
 
-static iter_t *new_iter(const pdf_t *pdf, ssize_t start_offset)
+static iter_t *new_iter(const pdf_t *pdf, off_t start_offset)
 {
     iter_t *itr = malloc(sizeof(iter_t));
     if (start_offset == -1)
@@ -148,7 +158,7 @@ static void destroy_iter(iter_t *itr)
 }
 
 
-static void set_iter(iter_t *itr, size_t offset)
+static void iter_set(iter_t *itr, off_t offset)
 {
     itr->idx = offset;
     if (!ITR_IN_BOUNDS(itr))
@@ -156,14 +166,59 @@ static void set_iter(iter_t *itr, size_t offset)
 }
 
 
+/* Returns true if found, false if not found */
+static _Bool seek_string(iter_t *itr, const char *match)
+{
+    const char *en, *st = ITR_ADDR(itr);
+    if (!(en = strstr(st, match)))
+      return NOT_FOUND;
+    iter_set(itr, ITR_POS(itr) + en - st);
+    return true;
+}
+
+
+typedef struct {off_t begin; off_t end;} obj_t;
+static obj_t get_object(const pdf_t *pdf, off_t obj_id)
+{
+    int i;
+    off_t n_entries;
+    obj_t obj;
+    iter_t *itr;
+    const xref_t *xref;
+  
+    /* Find the proper xref table */
+    for (i=0; i<pdf->n_xrefs; ++i)
+    {
+        xref = pdf->xrefs[i];
+        n_entries += xref->n_entries;
+        if (obj_id < n_entries)
+          break;
+    }
+
+    itr = new_iter(pdf, xref->entries[obj_id].offset);
+    seek_next(itr, ' '); /* Skip obj number     */
+    seek_next(itr, ' '); /* Skip obj generation */
+    iter_next(itr);
+    ERR(strncmp("obj ", ITR_VAL_STR(itr), strlen("obj")), !=0,
+                "Could not locate object");
+    seek_string(itr, "<<");
+    obj.begin = ITR_POS(itr);
+    seek_string(itr, ">>");
+    obj.end = ITR_POS(itr);
+    destroy_iter(itr);
+    return obj;
+}
+
+
 static void get_xref(pdf_t *pdf, iter_t *itr)
 {
-    size_t i, first_obj, n_entries;
+    off_t i, first_obj, n_entries, trailer;
+    obj_t obj;
     xref_t *xref;
 
     seek_next_line(itr);
     first_obj = ITR_VAL_INT(itr);
-    find_next(itr, ' ');
+    seek_next(itr, ' ');
     n_entries = ITR_VAL_INT(itr);
     D("xref starts at object %lu and contains %lu entries",
       first_obj, n_entries);
@@ -179,22 +234,52 @@ static void get_xref(pdf_t *pdf, iter_t *itr)
     xref->n_entries = n_entries;
     for (i=0; i<n_entries; ++i)
     {
+        /* Object offset */
         seek_next_line(itr);
         xref->entries[i].offset = ITR_VAL_INT(itr);
-        find_next(itr, ' ');
-        xref->entries[i].state = ITR_VAL_INT(itr);
+        
+        /* Object generation */ 
+        seek_next(itr, ' ');
+        iter_next(itr);
+        xref->entries[i].generation = ITR_VAL_INT(itr);
+       
+        /* Is free 'f' or in use 'n' */ 
+        seek_next(itr, ' ');
+        iter_next(itr);
+        xref->entries[i].is_free = ITR_VAL(itr) == 'f';
     }
 
     /* Get trailer */
     seek_next_line(itr);
     ERR(strncmp("trailer", ITR_VAL_STR(itr), strlen("trailer")), !=0,
         "Could not locate trailer");
+
+    trailer = ITR_POS(itr);
+
+    /* Find /Root */
+    if (seek_string(itr, "/Root") == NOT_FOUND)
+      return;
+    seek_next(itr, ' ');
+    xref->root_obj = ITR_VAL_INT(itr);
+    D("Document root located at %ld", xref->root_obj);
+
+    /* Find /Prev */
+    iter_set(itr, trailer);
+    if (seek_string(itr, "/Prev") != -1)
+    {
+        seek_next(itr, ' ');
+        iter_set(itr, ITR_VAL_INT(itr));
+        get_xref(pdf, itr);
+    }
+
+    /* Get the root object (might be /Pages or /Linearized) */
+    obj = get_object(pdf, xref->root_obj);
 }
 
 
 static void get_initial_xref(pdf_t *pdf)
 {
-    size_t xref;
+    off_t xref;
     iter_t *itr;
 
     /* Skip end of lines at the end of the file */
@@ -208,7 +293,7 @@ static void get_initial_xref(pdf_t *pdf)
     D("Initial xref table located at offset %lu", xref);
 
     /* Get xref */
-    set_iter(itr, xref);
+    iter_set(itr, xref);
     get_xref(pdf, itr);
 
     destroy_iter(itr);
