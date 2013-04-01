@@ -2,6 +2,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <stdbool.h>
+#include <ctype.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <unistd.h>
@@ -69,6 +70,8 @@ typedef struct {off_t idx; const pdf_t *pdf;} iter_t;
 #define ITR_POS(_itr)       _itr->idx
 #define ITR_ADDR(_itr)      (_itr->pdf->data + _itr->idx)
 #define ITR_IN_BOUNDS(_itr) ((_itr->idx>-1 && (_itr->idx < _itr->pdf->len)))
+#define ITR_IN_BOUNDS_V(_itr, _val) \
+    (((_itr->idx+_val)>-1) && ((_itr->idx+_val) < _itr->pdf->len))
 
 
 static void usage(const char *execname)
@@ -229,6 +232,13 @@ static _Bool find_in_object(iter_t *itr, obj_t obj, const char *match)
 }
 
 
+static void seek_next_nonwhitespace(iter_t *itr)
+{
+    while (!isspace(ITR_VAL(itr)) && ITR_IN_BOUNDS_V(itr, 1))
+      iter_next(itr);
+}
+
+
 static void get_xref(pdf_t *pdf, iter_t *itr)
 {
     off_t i, first_obj, n_entries, trailer;
@@ -279,7 +289,7 @@ static void get_xref(pdf_t *pdf, iter_t *itr)
     /* Find /Root */
     if (seek_string(itr, "/Root") == NOT_FOUND)
       return;
-    seek_next(itr, ' ');
+    seek_next_nonwhitespace(itr);
     xref->root_obj = ITR_VAL_INT(itr);
     D("Document root located at %ld", xref->root_obj);
 
@@ -287,7 +297,7 @@ static void get_xref(pdf_t *pdf, iter_t *itr)
     iter_set(itr, trailer);
     if (seek_string(itr, "/Prev") != -1)
     {
-        seek_next(itr, ' ');
+        seek_next_nonwhitespace(itr);
         iter_set(itr, ITR_VAL_INT(itr));
         get_xref(pdf, itr);
     }
@@ -296,7 +306,11 @@ static void get_xref(pdf_t *pdf, iter_t *itr)
     obj = get_object(pdf, xref->root_obj);
     if (find_in_object(itr, obj, "/Linearized"))
     {
-        //TODO
+        /* Get first page... */
+        seek_string(itr, "/O ");
+        seek_next_nonwhitespace(itr);
+        obj = get_object(pdf, ITR_VAL_INT(itr));
+        find_in_object(itr, obj, "/Parent");
     }
 }
 
