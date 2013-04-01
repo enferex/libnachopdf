@@ -182,7 +182,6 @@ typedef struct {off_t begin; off_t end;} obj_t;
 static obj_t get_object(const pdf_t *pdf, off_t obj_id)
 {
     int i;
-    off_t n_entries;
     obj_t obj;
     iter_t *itr;
     const xref_t *xref;
@@ -191,8 +190,8 @@ static obj_t get_object(const pdf_t *pdf, off_t obj_id)
     for (i=0; i<pdf->n_xrefs; ++i)
     {
         xref = pdf->xrefs[i];
-        n_entries += xref->n_entries;
-        if (obj_id < n_entries)
+        if (obj_id >= xref->first_entry_id && 
+            obj_id < xref->first_entry_id + xref->n_entries)
           break;
     }
 
