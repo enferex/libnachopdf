@@ -195,6 +195,7 @@ static obj_t get_object(const pdf_t *pdf, off_t obj_id)
           break;
     }
 
+    /* Create an object between "<<" and ">>" */
     itr = new_iter(pdf, xref->entries[obj_id].offset);
     seek_next(itr, ' '); /* Skip obj number     */
     seek_next(itr, ' '); /* Skip obj generation */
@@ -207,6 +208,24 @@ static obj_t get_object(const pdf_t *pdf, off_t obj_id)
     obj.end = ITR_POS(itr);
     destroy_iter(itr);
     return obj;
+}
+
+
+/* Locate string in object.  If it cannot be found 'false' is returned else, the
+ * iterator is updated an 'true' is returned.
+ */
+static _Bool find_in_object(iter_t *itr, obj_t obj, const char *match)
+{
+    const char *en;
+    off_t orig = ITR_POS(itr);
+
+    iter_set(itr, obj.begin);
+    if ((en = strstr(ITR_ADDR(itr), match)) &&
+        ((en - itr->pdf->data) <= obj.end))
+      return true;
+
+    iter_set(itr, orig);
+    return false;
 }
 
 
@@ -275,6 +294,10 @@ static void get_xref(pdf_t *pdf, iter_t *itr)
 
     /* Get the root object (might be /Pages or /Linearized) */
     obj = get_object(pdf, xref->root_obj);
+    if (find_in_object(itr, obj, "/Linearized"))
+    {
+        //TODO
+    }
 }
 
 
