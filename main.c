@@ -85,6 +85,7 @@ static void get_version(pdf_t *pdf)
 {
     ERR(sscanf(pdf->data,"%%PDF-%d.%d",&pdf->ver_major,&pdf->ver_minor), !=2,
         "Bad version string");
+    D("PDF Version: %d.%d", pdf->ver_major, pdf->ver_minor);
 }
 
 
@@ -185,6 +186,7 @@ typedef struct {off_t begin; off_t end;} obj_t;
 static obj_t get_object(const pdf_t *pdf, off_t obj_id)
 {
     int i;
+    off_t idx;
     obj_t obj;
     iter_t *itr;
     const xref_t *xref;
@@ -199,7 +201,8 @@ static obj_t get_object(const pdf_t *pdf, off_t obj_id)
     }
 
     /* Create an object between "<<" and ">>" */
-    itr = new_iter(pdf, xref->entries[obj_id].offset);
+    idx = obj_id - xref->first_entry_id;
+    itr = new_iter(pdf, xref->entries[idx].offset);
     seek_next(itr, ' '); /* Skip obj number     */
     seek_next(itr, ' '); /* Skip obj generation */
     iter_next(itr);
@@ -236,13 +239,27 @@ static void seek_next_nonwhitespace(iter_t *itr)
 {
     while (!isspace(ITR_VAL(itr)) && ITR_IN_BOUNDS_V(itr, 1))
       iter_next(itr);
+    while (isspace(ITR_VAL(itr)) && ITR_IN_BOUNDS_V(itr, 1))
+      iter_next(itr);
+}
+
+
+static void get_page_tree(pdf_t *pdf)
+{
+    obj_t obj;
+    iter_t *itr = new_iter(pdf, -1);
+
+    /* Get the root object (might be /Pages or /Linearized) */
+    obj = get_object(pdf, pdf->xrefs[0]->root_obj);
+    ERR(find_in_object(itr, obj, "/Pages"), ==false,
+        "Could not locate /Pages tree");
+    destroy_iter(itr);
 }
 
 
 static void get_xref(pdf_t *pdf, iter_t *itr)
 {
     off_t i, first_obj, n_entries, trailer;
-    obj_t obj;
     xref_t *xref;
 
     seek_next_line(itr);
@@ -283,7 +300,7 @@ static void get_xref(pdf_t *pdf, iter_t *itr)
     seek_next_line(itr);
     ERR(strncmp("trailer", ITR_VAL_STR(itr), strlen("trailer")), !=0,
         "Could not locate trailer");
-
+    
     trailer = ITR_POS(itr);
 
     /* Find /Root */
@@ -301,40 +318,34 @@ static void get_xref(pdf_t *pdf, iter_t *itr)
         iter_set(itr, ITR_VAL_INT(itr));
         get_xref(pdf, itr);
     }
-
-    /* Get the root object (might be /Pages or /Linearized) */
-    obj = get_object(pdf, xref->root_obj);
-    if (find_in_object(itr, obj, "/Linearized"))
-    {
-        /* Get first page... */
-        seek_string(itr, "/O ");
-        seek_next_nonwhitespace(itr);
-        obj = get_object(pdf, ITR_VAL_INT(itr));
-        find_in_object(itr, obj, "/Parent");
-    }
 }
 
 
-static void get_initial_xref(pdf_t *pdf)
+static void get_xrefs(pdf_t *pdf)
 {
     off_t xref;
     iter_t *itr;
-
+    
     /* Skip end of lines at the end of the file */
     itr = new_iter(pdf, -1);
     find_prev(itr, '%');
     find_prev(itr, '%');
-
-    /* Get xref offset */
-    seek_previous_line(itr);
+    seek_previous_line(itr); /* Get xref offset */
     xref = ITR_VAL_INT(itr);
     D("Initial xref table located at offset %lu", xref);
 
     /* Get xref */
     iter_set(itr, xref);
     get_xref(pdf, itr);
-
     destroy_iter(itr);
+}
+
+/* Loads cross reference tables and page tree */
+static void load_pdf_structure(pdf_t *pdf)
+{
+    get_version(pdf);
+    get_xrefs(pdf);
+    get_page_tree(pdf);
 }
 
 
@@ -379,12 +390,8 @@ int main(int argc, char **argv)
         "Mapping file into memory");
     pdf.len = stat.st_size;
 
-    /* Get pdf version info */
-    get_version(&pdf);
-    D("PDF Version: %d.%d", pdf.ver_major, pdf.ver_minor);
-
     /* Get the initial cross reference table */
-    get_initial_xref(&pdf);
+    load_pdf_structure(&pdf);
 
     /* Clean up */
     close(fd);
