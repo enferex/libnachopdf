@@ -46,7 +46,8 @@ typedef struct {off_t offset; off_t generation; char is_free;} xref_entry_t;
 typedef struct {
     int           n_entries;
     xref_entry_t *entries;
-    off_t        root_obj;
+    off_t         first_entry_id;
+    off_t         root_obj;
 } xref_t;
 
 
@@ -230,6 +231,7 @@ static void get_xref(pdf_t *pdf, iter_t *itr)
     ++pdf->n_xrefs;
 
     /* Add the entries */
+    xref->first_entry_id = first_obj;
     xref->entries = malloc(sizeof(xref_entry_t) * n_entries);
     xref->n_entries = n_entries;
     for (i=0; i<n_entries; ++i)
