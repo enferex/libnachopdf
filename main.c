@@ -431,10 +431,15 @@ static void load_pdf_structure(pdf_t *pdf)
 }
 
 
+static void decode_flate(iter_t *itr, off_t length)
+{
+}
+
+
 static void decode_page(const pdf_t *pdf, int pg_num)
 {
     const kid_t *k;
-    off_t pg_length;
+    off_t pg_length, stream_start;
     obj_t obj;
     iter_t *itr = new_iter(pdf, -1);
 
@@ -458,6 +463,20 @@ static void decode_page(const pdf_t *pdf, int pg_num)
     seek_next_nonwhitespace(itr);
     pg_length = ITR_VAL_INT(itr);
     D("Decoding page %d %lu", pg_num, pg_length);
+
+    /* Get beginning of stream */
+    seek_string(itr, "stream");
+    seek_next(itr, '\n');
+    iter_next(itr);
+    stream_start = ITR_POS(itr);
+
+    /* Decode the data */
+    if (find_in_object(itr, obj, "/Filter"))
+      if (find_in_object(itr, obj, "/FlateDecode"))
+      {
+          iter_set(itr, stream_start);
+          decode_flate(itr, pg_length);
+      }
 }
 
 
