@@ -52,6 +52,10 @@ typedef struct {
 } xref_t;
 
 
+/* Page type (just keep the kids not their parents) */
+typedef struct _kid_t {off_t id; struct _kid_t *next;} kid_t;
+
+
 /* Data type: Contains a pointer to the raw pdf data */
 typedef struct {
     const char   *data;
@@ -59,7 +63,12 @@ typedef struct {
     int           ver_major, ver_minor;
     int           n_xrefs;
     xref_t      **xrefs;
+    kid_t        *kids; /* Linked-list of all pages */
 }pdf_t;
+
+
+/* Range type */
+typedef struct {off_t id; off_t begin; off_t end;} obj_t;
 
 
 /* Iterator type: Index into data */
@@ -182,7 +191,7 @@ static _Bool seek_string(iter_t *itr, const char *match)
 }
 
 
-typedef struct {off_t begin; off_t end;} obj_t;
+/* Creates a fresh object */
 static obj_t get_object(const pdf_t *pdf, off_t obj_id)
 {
     int i;
@@ -212,6 +221,7 @@ static obj_t get_object(const pdf_t *pdf, off_t obj_id)
     obj.begin = ITR_POS(itr);
     seek_string(itr, ">>");
     obj.end = ITR_POS(itr);
+    obj.id = obj_id;
     destroy_iter(itr);
     return obj;
 }
@@ -244,6 +254,64 @@ static void seek_next_nonwhitespace(iter_t *itr)
 }
 
 
+static void add_kid(pdf_t *pdf, obj_t kid)
+{
+    kid_t *tmp, *new_kid;
+    iter_t *itr = new_iter(pdf, -1);
+
+    if (!find_in_object(itr, kid, "/Page"))
+    {
+        destroy_iter(itr);
+        return;
+    }
+
+    new_kid = malloc(sizeof(kid_t));
+    new_kid->id = kid.id;
+    tmp = pdf->kids;
+    pdf->kids = new_kid;
+    new_kid->next = tmp;
+    destroy_iter(itr);
+}
+
+
+/* This should be a parent with /Count and /Kids entries */
+static void pages_from_parent(pdf_t *pdf, obj_t obj)
+{
+    off_t next_id;
+    iter_t *itr = new_iter(pdf, -1);
+    
+    /* Get count */
+    if (!find_in_object(itr, obj, "/Count"))
+    {
+        add_kid(pdf, obj);
+        return;
+    }
+
+    /* Get the child pages */
+    seek_next_nonwhitespace(itr);
+    if (!find_in_object(itr, obj, "/Kids"))
+    {
+        add_kid(pdf, obj);
+        return;
+    }
+
+    /* Must be a parent if we get here */
+    seek_next(itr, '[');
+    while (ITR_VAL(itr) != ']')
+    {
+        /* Get decendents */
+        iter_next(itr);
+        next_id = ITR_VAL_INT(itr);
+        seek_next_nonwhitespace(itr); /* Skip version */
+        seek_next_nonwhitespace(itr); /* Skip ref     */
+        iter_next(itr);
+        pages_from_parent(pdf, get_object(pdf, next_id));
+    }
+
+    destroy_iter(itr);
+}
+
+
 static void get_page_tree(pdf_t *pdf)
 {
     obj_t obj;
@@ -253,7 +321,17 @@ static void get_page_tree(pdf_t *pdf)
     obj = get_object(pdf, pdf->xrefs[0]->root_obj);
     ERR(find_in_object(itr, obj, "/Pages"), ==false,
         "Could not locate /Pages tree");
+    seek_next_nonwhitespace(itr);
+    pages_from_parent(pdf, get_object(pdf, ITR_VAL_INT(itr)));
     destroy_iter(itr);
+}
+
+
+static void print_page_tree(const pdf_t *pdf)
+{
+    const kid_t *k;
+    for (k=pdf->kids; k; k=k->next)
+      printf("Page: %ld\n", k->id);
 }
 
 
@@ -392,6 +470,8 @@ int main(int argc, char **argv)
 
     /* Get the initial cross reference table */
     load_pdf_structure(&pdf);
+
+    print_page_tree(&pdf);
 
     /* Clean up */
     close(fd);
