@@ -433,7 +433,31 @@ static void load_pdf_structure(pdf_t *pdf)
 
 static void decode_page(const pdf_t *pdf, int pg_num)
 {
-    D("Decoding page %d", pg_num);
+    const kid_t *k;
+    off_t pg_length;
+    obj_t obj;
+    iter_t *itr = new_iter(pdf, -1);
+
+    for (k=pdf->kids; k; k=k->next)
+      if (k->pg_num == pg_num)
+        break;
+
+    if (!k)
+      return;
+
+    /* Get contents */
+    obj = get_object(pdf, k->id);
+    ERR(find_in_object(itr, obj, "/Contents"), ==false,
+        "Could not locate page contents");
+    seek_next_nonwhitespace(itr);
+    obj = get_object(pdf, ITR_VAL_INT(itr));
+
+    /* Get the pages data */
+    ERR(find_in_object(itr, obj, "/Length"), ==false,
+        "Could not find length of the pages data");
+    seek_next_nonwhitespace(itr);
+    pg_length = ITR_VAL_INT(itr);
+    D("Decoding page %d %lu", pg_num, pg_length);
 }
 
 
