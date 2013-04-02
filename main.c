@@ -427,9 +427,18 @@ static void load_pdf_structure(pdf_t *pdf)
 }
 
 
+static void decode_page(const pdf_t *pdf, int pgno)
+{
+    D("Decoding page %d", pgno);
+}
+
+
 int main(int argc, char **argv)
 {
     int i, fd;
+#ifdef DEBUG
+    int debug_page = 0;
+#endif
     pdf_t pdf;
     struct stat stat;
     const char *fname = NULL, *expr = NULL;
@@ -446,6 +455,10 @@ int main(int argc, char **argv)
             else 
               usage(argv[0]);
         }
+#ifdef DEBUG
+        else if (strncmp(argv[i], "-d", 2) == 0)
+          debug_page = atoi(argv[++i]);
+#endif
         else if (argv[i][0] != '-')
           fname = argv[i];
         else
@@ -471,7 +484,11 @@ int main(int argc, char **argv)
     /* Get the initial cross reference table */
     load_pdf_structure(&pdf);
 
+#ifdef DEBUG
     print_page_tree(&pdf);
+    if (debug_page)
+      decode_page(&pdf, debug_page);
+#endif
 
     /* Clean up */
     close(fd);
