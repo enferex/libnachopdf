@@ -53,7 +53,7 @@ typedef struct {
 
 
 /* Page type (just keep the kids not their parents) */
-typedef struct _kid_t {off_t id; struct _kid_t *next;} kid_t;
+typedef struct _kid_t {int pg_num; off_t id; struct _kid_t *next;} kid_t;
 
 
 /* Data type: Contains a pointer to the raw pdf data */
@@ -257,6 +257,7 @@ static void seek_next_nonwhitespace(iter_t *itr)
 static void add_kid(pdf_t *pdf, obj_t kid)
 {
     kid_t *tmp, *new_kid;
+    static int pg_num_pool;
     iter_t *itr = new_iter(pdf, -1);
 
     if (!find_in_object(itr, kid, "/Page"))
@@ -266,6 +267,7 @@ static void add_kid(pdf_t *pdf, obj_t kid)
     }
 
     new_kid = malloc(sizeof(kid_t));
+    new_kid->pg_num = ++pg_num_pool;
     new_kid->id = kid.id;
     tmp = pdf->kids;
     pdf->kids = new_kid;
@@ -327,12 +329,14 @@ static void get_page_tree(pdf_t *pdf)
 }
 
 
+#ifdef DEBUG
 static void print_page_tree(const pdf_t *pdf)
 {
     const kid_t *k;
     for (k=pdf->kids; k; k=k->next)
-      printf("Page: %ld\n", k->id);
+      D("Page %d: %ld\n", k->pg_num, k->id);
 }
+#endif
 
 
 static void get_xref(pdf_t *pdf, iter_t *itr)
@@ -427,9 +431,9 @@ static void load_pdf_structure(pdf_t *pdf)
 }
 
 
-static void decode_page(const pdf_t *pdf, int pgno)
+static void decode_page(const pdf_t *pdf, int pg_num)
 {
-    D("Decoding page %d", pgno);
+    D("Decoding page %d", pg_num);
 }
 
 
