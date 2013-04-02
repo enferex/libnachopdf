@@ -9,6 +9,8 @@
 #include <sys/mman.h>
 #include <sys/stat.h>
 
+#include <zlib.h>
+
 
 #define TAG "pdfgrep"
 
@@ -431,8 +433,53 @@ static void load_pdf_structure(pdf_t *pdf)
 }
 
 
+static void print_decoded(unsigned char *data, off_t length)
+{
+    off_t i;
+
+    for (i=0; i<length; ++i)
+      putc(data[i], stdout);
+}
+
+
 static void decode_flate(iter_t *itr, off_t length)
 {
+    int ret;
+    off_t n_read, to_read;
+    const off_t block_size = 1024;
+    unsigned char in[block_size], out[block_size];
+    z_stream stream;
+
+    memset(&stream, 0, sizeof(z_stream));
+    if ((ret = inflateInit(&stream)) != Z_OK)
+      return;
+
+    n_read = 0;
+    do
+    {
+        to_read = block_size - (n_read % block_size);
+        stream.avail_in = to_read;
+        memcpy(in, ITR_ADDR(itr) + n_read, to_read);
+        stream.next_in = in;
+        n_read += to_read;
+        do
+        {
+            stream.avail_out = block_size;
+            stream.next_out = out;
+            ret = inflate(&stream, Z_NO_FLUSH);
+            switch (ret)
+            {
+                case Z_NEED_DICT:
+                case Z_DATA_ERROR:
+                case Z_MEM_ERROR:
+                    inflateEnd(&stream);
+                    return;
+            }
+            print_decoded(out, block_size - stream.avail_out);
+        } while (stream.avail_out == 0);
+    } while (ret != Z_STREAM_END);
+
+    inflateEnd(&stream);
 }
 
 
