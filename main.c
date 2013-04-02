@@ -329,12 +329,12 @@ static void get_page_tree(pdf_t *pdf)
 }
 
 
-#ifdef DEBUG
+#if 0
 static void print_page_tree(const pdf_t *pdf)
 {
     const kid_t *k;
     for (k=pdf->kids; k; k=k->next)
-      D("Page %d: %ld\n", k->pg_num, k->id);
+      D("Page %d: %ld", k->pg_num, k->id);
 }
 #endif
 
@@ -489,9 +489,12 @@ int main(int argc, char **argv)
     load_pdf_structure(&pdf);
 
 #ifdef DEBUG
-    print_page_tree(&pdf);
     if (debug_page)
       decode_page(&pdf, debug_page);
+#endif
+
+#if 0
+    print_page_tree(&pdf);
 #endif
 
     /* Clean up */
