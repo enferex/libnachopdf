@@ -8,7 +8,9 @@
 #include <unistd.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
+#include <sys/types.h>
 
+#include <regex.h>
 #include <zlib.h>
 
 
@@ -17,6 +19,9 @@
 
 #define _P(_tag, ...) \
     do {printf("["TAG"]"_tag" "__VA_ARGS__); putc('\n', stdout);} while(0)
+
+
+#define P(...) do {printf(__VA_ARGS__); putc('\n', stdout);} while(0)
 
 
 #ifdef DEBUG
@@ -61,6 +66,7 @@ typedef struct _kid_t {int pg_num; off_t id; struct _kid_t *next;} kid_t;
 /* Data type: Contains a pointer to the raw pdf data */
 typedef struct {
     const char   *data;
+    const char   *fname; /* File name */
     size_t        len;
     int           ver_major, ver_minor;
     int           n_xrefs;
@@ -547,7 +553,7 @@ static void decode_flate(iter_t *itr, off_t length)
 }
 
 
-static void decode_page(const pdf_t *pdf, int pg_num)
+static char *decode_page(const pdf_t *pdf, int pg_num)
 {
     const kid_t *k;
     off_t pg_length, stream_start;
@@ -559,7 +565,7 @@ static void decode_page(const pdf_t *pdf, int pg_num)
         break;
 
     if (!k)
-      return;
+      return NULL;
 
     /* Get contents */
     obj = get_object(pdf, k->id);
@@ -586,8 +592,23 @@ static void decode_page(const pdf_t *pdf, int pg_num)
       if (find_in_object(itr, obj, "/FlateDecode"))
       {
           iter_set(itr, stream_start);
-          decode_flate(itr, pg_length);
+          return decode_flate(itr, pg_length);
       }
+}
+
+static void run_regex(const pdf_t *pdf, const regex_t *re)
+{
+    int i, match;
+    const kid_t *kid;
+    const char *buf;
+
+    for (kid=pdf->kids; kid; kid=kid->next)
+    {
+        buf = decode_page(pdf, kid->pg_num);
+        match = regexec(re, buf, 0, NULL, 0);
+        if (match == 0)
+          P("%s: Found match on page %d", pdf->fname, kid->pg_num);
+    }
 }
 
 
@@ -598,6 +619,7 @@ int main(int argc, char **argv)
     int debug_page = 0;
 #endif
     pdf_t pdf;
+    regex_t re;
     struct stat stat;
     const char *fname = NULL, *expr = NULL;
 
@@ -628,9 +650,14 @@ int main(int argc, char **argv)
 
     D("File: %s", fname);
     D("Expr: %s", expr);
+
+    /* Build regex */
+    ERR(regcomp(&re, expr, REG_EXTENDED), !=0,
+        "Could not build regex");
    
     /* New pdf */ 
     memset(&pdf, 0, sizeof(pdf_t));
+    pdf.fname = fname;
 
     /* Open and map the file into memory */
     ERR((fd = open(fname, O_RDONLY)), ==-1, "Opening file '%s'", fname);
@@ -641,6 +668,9 @@ int main(int argc, char **argv)
 
     /* Get the initial cross reference table */
     load_pdf_structure(&pdf);
+
+    /* Run the match routine */
+    run_regex(&pdf, &re);
 
 #ifdef DEBUG
     if (debug_page)
@@ -653,6 +683,7 @@ int main(int argc, char **argv)
 
     /* Clean up */
     close(fd);
+    regfree(&re);
 
     return 0;
 }
