@@ -433,12 +433,74 @@ static void load_pdf_structure(pdf_t *pdf)
 }
 
 
-static void print_decoded(unsigned char *data, off_t length)
+static void decode_ps(unsigned char *data, off_t length)
 {
-    off_t i;
+    unsigned char c;
+    off_t i=0, stack_idx=0;
+    double Tc=0.0, val_stack[2] = {0.0, 0.0};
+    static const int X=0, Y=1;
 
+
+#ifdef DEBUG_PS
     for (i=0; i<length; ++i)
       putc(data[i], stdout);
+#endif
+
+    i = 0;
+    while (i < length)
+    {
+        c = data[i];
+
+        if (isspace(c))
+        {
+            i++;
+            continue;
+        }
+
+        /* Text to display */
+        if (c == '(')
+        {
+            ++i;
+            while (data[i] != ')')
+            {
+               putc(data[i], stdout);
+               ++i;
+            }
+        }
+
+        /* Position value */
+        else if (isdigit(c) || c == '-')
+        {
+            val_stack[stack_idx++%2] = atof((char *)data + i);
+            while (isdigit(data[i]) || data[i] == '.' || data[i] == '-')
+              ++i;
+        }
+
+        /* New line (skip other display options like Tf and Tj */
+        else if (c == 'T') 
+        {
+            c = data[++i];
+            /* Newline (or space) */
+            if ((c=='D' || c=='d' || c=='*'))
+            {
+                if (val_stack[Y] != 0.0)
+                  putc('\n', stdout);
+                else if (Tc>=0.0 && val_stack[X]>0.0)
+                  putc(' ', stdout);
+            }
+            else if (c == 'c')
+              Tc = val_stack[X];
+            val_stack[0] = val_stack[1] = 0.0;
+            stack_idx = 0;
+        }
+
+        /* New line */
+        else if (c == '\'' || c == '"')
+          putc('\n', stdout);
+
+        else
+          ++i;
+    }
 }
 
 
@@ -455,6 +517,8 @@ static void decode_flate(iter_t *itr, off_t length)
       return;
 
     n_read = 0;
+
+    /* Thanks to http://www.zlib.net/zpipe.c for the following */
     do
     {
         to_read = block_size - (n_read % block_size);
@@ -475,7 +539,7 @@ static void decode_flate(iter_t *itr, off_t length)
                     inflateEnd(&stream);
                     return;
             }
-            print_decoded(out, block_size - stream.avail_out);
+            decode_ps(out, block_size - stream.avail_out);
         } while (stream.avail_out == 0);
     } while (ret != Z_STREAM_END);
 
