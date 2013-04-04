@@ -91,6 +91,47 @@ typedef struct {off_t idx; const pdf_t *pdf;} iter_t;
     (((_itr->idx+_val)>-1) && ((_itr->idx+_val) < _itr->pdf->len))
 
 
+/* Decoding return values, all decoding routines and the callback return one
+ * of these values.
+ */
+typedef enum {DECODE_DONE, DECODE_CONTINUE} decode_exit_e;
+
+
+/* Function pointer: Called back by decoding routine when buffer in decode_t is
+ * full AND when decoding is done.
+ */
+struct _decode_t;
+typedef  decode_exit_e (*decode_cb)(struct _decode_t *decode);
+
+
+/* For decoding data */
+typedef struct _decode_t
+{
+    const pdf_t *pdf;
+    int          pg_num;
+    decode_cb    callback;
+
+    /* Decoded data will end up here... user must give a buffer and its length.
+     * the buffer is NOT null terminated by the decoing routines.
+     *
+     * Decoding routines will place the length decoded into the buffer_used
+     * when callback is called.
+     *
+     * Decoding routines call 'callback' when the buffer is full and when done
+     * decoding.
+     */
+    char   *buffer;
+    size_t  buffer_length; /* Should never change once set */
+    size_t  buffer_used;
+
+    /* Stash anything here, the pdf library should never touch this... like a
+     * Swiss bank of data.
+     */
+    void *user_data;
+
+} decode_t;
+
+
 static void usage(const char *execname)
 {
     printf("Usage: %s <file> <-e regexp>\n", execname);
@@ -430,6 +471,7 @@ static void get_xrefs(pdf_t *pdf)
     destroy_iter(itr);
 }
 
+
 /* Loads cross reference tables and page tree */
 static void load_pdf_structure(pdf_t *pdf)
 {
@@ -439,13 +481,19 @@ static void load_pdf_structure(pdf_t *pdf)
 }
 
 
-static void decode_ps(unsigned char *data, off_t length)
+static decode_exit_e decode_ps(
+    unsigned char *data,
+    off_t          length,
+    decode_t      *decode)
 {
+    decode_exit_e de;
     unsigned char c;
     off_t i=0, stack_idx=0;
     double Tc=0.0, val_stack[2] = {0.0, 0.0};
     static const int X=0, Y=1;
-
+    size_t bufidx = 0;
+    const size_t max_buf = decode->buffer_length;
+    char *buf = decode->buffer;
 
 #ifdef DEBUG_PS
     for (i=0; i<length; ++i)
@@ -455,8 +503,17 @@ static void decode_ps(unsigned char *data, off_t length)
     i = 0;
     while (i < length)
     {
-        c = data[i];
+        /* If we have filled the buffer... callback */
+        if (bufidx > max_buf)
+        {
+            decode->buffer_used = bufidx;
+            if ((de = decode->callback(decode)) != DECODE_CONTINUE)
+              return DECODE_DONE;
+            bufidx = decode->buffer_used;
+        }
 
+        /* Parse... */
+        c = data[i];
         if (isspace(c))
         {
             i++;
@@ -469,8 +526,8 @@ static void decode_ps(unsigned char *data, off_t length)
             ++i;
             while (data[i] != ')')
             {
-               putc(data[i], stdout);
-               ++i;
+                buf[bufidx++] = data[i];
+                ++i;
             }
         }
 
@@ -490,9 +547,9 @@ static void decode_ps(unsigned char *data, off_t length)
             if ((c=='D' || c=='d' || c=='*'))
             {
                 if (val_stack[Y] != 0.0)
-                  putc('\n', stdout);
+                  buf[bufidx++] = '\n';
                 else if (Tc>=0.0 && val_stack[X]>0.0)
-                  putc(' ', stdout);
+                  buf[bufidx++] = ' ';
             }
             else if (c == 'c')
               Tc = val_stack[X];
@@ -502,25 +559,33 @@ static void decode_ps(unsigned char *data, off_t length)
 
         /* New line */
         else if (c == '\'' || c == '"')
-          putc('\n', stdout);
+          buf[bufidx++] = '\n';
 
         else
           ++i;
     }
+
+    /* Done decoding call the callback */
+    decode->buffer_used = bufidx;
+    return decode->callback(decode);
 }
 
 
-static void decode_flate(iter_t *itr, off_t length)
+static decode_exit_e decode_flate(
+    iter_t   *itr,
+    off_t     length,
+    decode_t *decode)
 {
     int ret;
     off_t n_read, to_read;
+    decode_exit_e de;
     const off_t block_size = 1024;
     unsigned char in[block_size], out[block_size];
     z_stream stream;
 
     memset(&stream, 0, sizeof(z_stream));
     if ((ret = inflateInit(&stream)) != Z_OK)
-      return;
+      return DECODE_DONE;
 
     n_read = 0;
 
@@ -543,43 +608,50 @@ static void decode_flate(iter_t *itr, off_t length)
                 case Z_DATA_ERROR:
                 case Z_MEM_ERROR:
                     inflateEnd(&stream);
-                    return;
+                    return DECODE_DONE;
             }
-            decode_ps(out, block_size - stream.avail_out);
+
+            /* Decode the compressed data (ps format) */
+            de = decode_ps(out, block_size - stream.avail_out, decode);
+            if (de != DECODE_CONTINUE)
+              return de;
+
+        /* If more data... keep on decompressing */
         } while (stream.avail_out == 0);
     } while (ret != Z_STREAM_END);
 
     inflateEnd(&stream);
+    return DECODE_DONE;
 }
 
 
-static char *decode_page(const pdf_t *pdf, int pg_num)
+static void decode_page(decode_t *decode)
 {
     const kid_t *k;
     off_t pg_length, stream_start;
     obj_t obj;
-    iter_t *itr = new_iter(pdf, -1);
+    iter_t *itr = new_iter(decode->pdf, -1);
 
-    for (k=pdf->kids; k; k=k->next)
-      if (k->pg_num == pg_num)
+    for (k=decode->pdf->kids; k; k=k->next)
+      if (k->pg_num == decode->pg_num)
         break;
 
     if (!k)
-      return NULL;
+      return;
 
     /* Get contents */
-    obj = get_object(pdf, k->id);
+    obj = get_object(decode->pdf, k->id);
     ERR(find_in_object(itr, obj, "/Contents"), ==false,
         "Could not locate page contents");
     seek_next_nonwhitespace(itr);
-    obj = get_object(pdf, ITR_VAL_INT(itr));
+    obj = get_object(decode->pdf, ITR_VAL_INT(itr));
 
     /* Get the pages data */
     ERR(find_in_object(itr, obj, "/Length"), ==false,
         "Could not find length of the pages data");
     seek_next_nonwhitespace(itr);
     pg_length = ITR_VAL_INT(itr);
-    D("Decoding page %d %lu", pg_num, pg_length);
+    D("Decoding page %d (%lu bytes)", decode->pg_num, pg_length);
 
     /* Get beginning of stream */
     seek_string(itr, "stream");
@@ -592,23 +664,69 @@ static char *decode_page(const pdf_t *pdf, int pg_num)
       if (find_in_object(itr, obj, "/FlateDecode"))
       {
           iter_set(itr, stream_start);
-          return decode_flate(itr, pg_length);
+          if (decode_flate(itr, pg_length, decode) == DECODE_DONE)
+            return;
       }
 }
 
+
+/* Gets called back from the decode routine when the buffer is full */
+static decode_exit_e regexp_callback(decode_t *decode)
+{
+    int match = regexec(
+        (regex_t*)decode->user_data, decode->buffer, 0, NULL, 0);
+
+    if (match)
+    {
+        P("%s: Found match on page %d", decode->pdf->fname, decode->pg_num);
+        return DECODE_DONE;
+    }
+
+    return DECODE_CONTINUE;
+}
+
+
 static void run_regex(const pdf_t *pdf, const regex_t *re)
 {
-    int i, match;
     const kid_t *kid;
-    const char *buf;
+    char buf[2048] = {0};
+    decode_t decode;
+
+    decode.pdf = pdf;
+    decode.callback = regexp_callback;
+    decode.buffer = buf;
+    decode.buffer_length = sizeof(buf);
+    decode.user_data = (void *)re;
 
     for (kid=pdf->kids; kid; kid=kid->next)
     {
-        buf = decode_page(pdf, kid->pg_num);
-        match = regexec(re, buf, 0, NULL, 0);
-        if (match == 0)
-          P("%s: Found match on page %d", pdf->fname, kid->pg_num);
+        decode.pg_num = kid->pg_num;
+        decode.buffer_used = 0;
+        decode_page(&decode);
     }
+}
+
+
+static decode_exit_e print_buffer_callback(decode_t *decode)
+{
+    printf(decode->buffer);
+    decode->buffer_used = 0;
+    return DECODE_CONTINUE;
+}
+
+
+static void debug_page(const pdf_t *pdf, int pg_num)
+{
+    decode_t decode;
+    char buf[2048] = {0};
+
+    decode.pdf = pdf;
+    decode.buffer = buf;
+    decode.buffer_length = sizeof(buf) - 1;
+    decode.buffer_used = 0;
+    decode.callback = print_buffer_callback;
+    decode.user_data = NULL;
+    decode_page(&decode);
 }
 
 
@@ -616,7 +734,7 @@ int main(int argc, char **argv)
 {
     int i, fd;
 #ifdef DEBUG
-    int debug_page = 0;
+    int debug_page_num = 0;
 #endif
     pdf_t pdf;
     regex_t re;
@@ -637,7 +755,7 @@ int main(int argc, char **argv)
         }
 #ifdef DEBUG
         else if (strncmp(argv[i], "-d", 2) == 0)
-          debug_page = atoi(argv[++i]);
+          debug_page_num = atoi(argv[++i]);
 #endif
         else if (argv[i][0] != '-')
           fname = argv[i];
@@ -673,8 +791,8 @@ int main(int argc, char **argv)
     run_regex(&pdf, &re);
 
 #ifdef DEBUG
-    if (debug_page)
-      decode_page(&pdf, debug_page);
+    if (debug_page_num)
+      debug_page(&pdf, debug_page_num);
 #endif
 
 #if 0
