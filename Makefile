@@ -1,5 +1,5 @@
 APP = pdfgrep
-CFLAGS = -g3 -O0 -Wall -pedantic -std=c99
+CFLAGS = -g3 -O0 -Wall -pedantic -std=c99 -DDEBUG
 
 $(APP): main.c
 	$(CC) $^ $(CFLAGS) -o $(APP) -lz $(EXTRA_CFLAGS)
