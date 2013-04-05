@@ -5,10 +5,10 @@ $(APP): main.c
 	$(CC) $^ $(CFLAGS) -o $(APP) -lz $(EXTRA_CFLAGS)
 
 test: $(APP)
-	./$(APP) -e "foo" test.pdf -d 20 
+	./$(APP) -e "foo" test.pdf -d 1
 
 debug: $(APP)
-	exec gdb --args ./$(APP) -e "foo" test.pdf -d 20
+	exec gdb --args ./$(APP) -e "foo" test.pdf -d 1
 
 clean:
 	$(RM) -fv $(APP)
