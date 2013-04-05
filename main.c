@@ -710,6 +710,7 @@ static void run_regex(const pdf_t *pdf, const regex_t *re)
 static decode_exit_e print_buffer_callback(decode_t *decode)
 {
     printf(decode->buffer);
+    memset(decode->buffer, 0, decode->buffer_length);
     decode->buffer_used = 0;
     return DECODE_CONTINUE;
 }
@@ -721,6 +722,7 @@ static void debug_page(const pdf_t *pdf, int pg_num)
     char buf[2048] = {0};
 
     decode.pdf = pdf;
+    decode.pg_num = pg_num;
     decode.buffer = buf;
     decode.buffer_length = sizeof(buf) - 1;
     decode.buffer_used = 0;
