@@ -481,18 +481,36 @@ static void load_pdf_structure(pdf_t *pdf)
 }
 
 
+/* If the value idx is greater than the buffer size,
+ * issue a callback to the decode listner.
+ * 
+ * 'buf_idx' -- Should have the current buffer size, it will be updated if the
+ *              callback is issued.
+ */
+static decode_exit_e cb_if_full(decode_t *decode, size_t *buf_idx)
+{
+    if (*buf_idx > decode->buffer_length)
+    {
+        decode->buffer_used = *buf_idx;
+        if ((decode->callback(decode)) == DECODE_DONE)
+          return DECODE_DONE;
+        *buf_idx = decode->buffer_used;
+    }
+
+    return DECODE_CONTINUE;
+}
+
+
 static decode_exit_e decode_ps(
     unsigned char *data,
     off_t          length,
     decode_t      *decode)
 {
-    decode_exit_e de;
     unsigned char c;
     off_t i=0, stack_idx=0;
     double Tc=0.0, val_stack[2] = {0.0, 0.0};
     static const int X=0, Y=1;
     size_t bufidx = 0;
-    const size_t max_buf = decode->buffer_length;
     char *buf = decode->buffer;
 
 #ifdef DEBUG_PS
@@ -504,13 +522,8 @@ static decode_exit_e decode_ps(
     while (i < length)
     {
         /* If we have filled the buffer... callback */
-        if (bufidx > max_buf)
-        {
-            decode->buffer_used = bufidx;
-            if ((de = decode->callback(decode)) != DECODE_CONTINUE)
-              return DECODE_DONE;
-            bufidx = decode->buffer_used;
-        }
+        if (cb_if_full(decode, &bufidx) == DECODE_DONE)
+          return DECODE_DONE;
 
         /* Parse... */
         c = data[i];
@@ -526,6 +539,8 @@ static decode_exit_e decode_ps(
             ++i;
             while (data[i] != ')')
             {
+                if (cb_if_full(decode, &bufidx))
+                  return DECODE_DONE;
                 buf[bufidx++] = data[i];
                 ++i;
             }
