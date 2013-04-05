@@ -676,7 +676,7 @@ static decode_exit_e regexp_callback(decode_t *decode)
     int match = regexec(
         (regex_t*)decode->user_data, decode->buffer, 0, NULL, 0);
 
-    if (match)
+    if (match == 0)
     {
         P("%s: Found match on page %d", decode->pdf->fname, decode->pg_num);
         return DECODE_DONE;
