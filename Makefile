@@ -1,20 +1,30 @@
 APP = pdfgrep
-OBJS = main.o pdf.o
-CFLAGS = -g3 -O0 -Wall -pedantic -std=c99 -DDEBUG
+OBJS = main.o
+CFLAGS = -g3 -O0 -Wall -pedantic -std=c99 -fPIC -DDEBUG
+LIBNAME = nachopdf
+LIBOBJS = pdf.o
+LIB = lib$(LIBNAME).so
 
-all: $(OBJS) $(APP)
+all: $(OBJS) $(APP) $(LIB)
 
 %.o: %.c
 	$(CC) $(CFLAGS) $(EXTRA_CFLAGS) -c $^ -o $@
 
-$(APP): $(OBJS)
-	$(CC) $(OBJS) $(CFLAGS) $(EXTRA_CFLAGS) -lz -o $@
+$(APP): $(OBJS) $(LIB)
+	$(CC) $(OBJS) $(CFLAGS) $(EXTRA_CFLAGS) -L. -l$(LIBNAME) -lz -o $@ 
 
-test: $(APP)
+$(LIB): $(LIBOBJS)
+	$(CC) $(LIBOBJS) $(CFLAGS) -fPIC -shared -o $@
+
+test: $(APP) exportvars
 	./$(APP) -e "foo" test.pdf -d 1
 
-debug: $(APP)
+debug: $(APP) exportvars
 	exec gdb --args ./$(APP) -e "foo" test.pdf -d 1
 
+.PHONY: exportvars
+exportvars:
+	export LD_LIBRARY_PATH=$(LD_LIBRARY_PATH):.
+
 clean:
-	$(RM) -fv $(APP) $(OBJS)
+	$(RM) -fv $(APP) $(OBJS) $(LIB) $(LIBOBJS)
