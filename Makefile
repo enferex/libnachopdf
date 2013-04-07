@@ -2,7 +2,7 @@ APP = pdfgrep
 OBJS = main.o
 CFLAGS = -g3 -O0 -Wall -pedantic -std=c99 -fPIC -DDEBUG
 LIBNAME = nachopdf
-LIBOBJS = pdf.o
+LIBOBJS = pdf.o decode.o
 LIB = lib$(LIBNAME).so
 
 all: $(OBJS) $(APP) $(LIB)

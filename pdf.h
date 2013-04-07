@@ -126,6 +126,14 @@ extern int pdf_load_data(pdf_t *pdf);
 extern _Bool pdf_get_object(const pdf_t *pdf, off_t object_number, obj_t *obj);
 
 
+/* Given a decode object (which contains a pdf and a page number to decode).
+ * The callback in the decode object is called, possibly multiple times during
+ * decoding, with a buffer of decoded page data (ascii).
+ * PDF_OK is returned on success, PDF_ERR is returned otherwise.
+ */
+extern int pdf_decode_page(decode_t *decode);
+
+
 /* Create or destroy an iterator (for parsing a pdf)
  * offset: Byte offset into the pdf to start the iterator at.
  */
@@ -173,7 +181,6 @@ extern void seek_next_line(iter_t *itr);
  * match.
  */
 extern _Bool find_in_object(iter_t *itr, obj_t obj, const char *search);
-
 
 
 #endif /* __PDF_H_INCLUDE */
