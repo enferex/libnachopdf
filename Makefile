@@ -16,15 +16,13 @@ $(APP): $(OBJS) $(LIB)
 $(LIB): $(LIBOBJS)
 	$(CC) $(LIBOBJS) $(CFLAGS) -fPIC -shared -o $@
 
-test: $(APP) exportvars
+test: $(APP)
+	LD_LIBRARY_PATH=$(LD_LIBRARY_PATH):. \
 	./$(APP) -e "foo" test.pdf -d 1
 
-debug: $(APP) exportvars
+debug: $(APP)
+	LD_LIBRARY_PATH=$(LD_LIBRARY_PATH):. \
 	exec gdb --args ./$(APP) -e "foo" test.pdf -d 1
-
-.PHONY: exportvars
-exportvars:
-	export LD_LIBRARY_PATH=$(LD_LIBRARY_PATH):.
 
 clean:
 	$(RM) -fv $(APP) $(OBJS) $(LIB) $(LIBOBJS)
