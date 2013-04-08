@@ -206,15 +206,18 @@ static int find_and_decode(obj_t obj, decode_t *decode)
     seek_next(itr, '/');
 
     /* Get the Filte name */
+    i = 0;
+    iter_next(itr);
     while (i<sizeof(name)-1 && isalnum(ITR_VAL(itr)))
     {
-        name[++i] = ITR_VAL(itr);
+        name[i++] = ITR_VAL(itr);
         iter_next(itr);
     }
 
     /* Get the start of the stream */
     seek_string(itr, "stream");
     seek_next(itr, '\n');
+    iter_next(itr);
 
     /* Look through all decoders until we find the corresponding one */
     for (i=0; i<n_decoders; ++i)
