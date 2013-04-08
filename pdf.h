@@ -9,7 +9,7 @@
 
 #ifdef DEBUG_PDF
 #define D(...) \
-    do {fprintf(stderr,TAG"[debug]",__VA_ARGS__); putc('\n',stderr);} while(0)
+    do {fprintf(stderr,TAG"[debug]" __VA_ARGS__); putc('\n',stderr);} while(0)
 #else
 #define D(...)
 #endif

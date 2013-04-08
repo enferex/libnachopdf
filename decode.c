@@ -111,9 +111,9 @@ static decode_exit_e decode_ps(
 
 
 static decode_exit_e decode_flate(
+    decode_t *decode,
     iter_t   *itr,
-    off_t     length,
-    decode_t *decode)
+    size_t    length)
 {
     int ret;
     off_t n_read, to_read;
@@ -164,10 +164,77 @@ static decode_exit_e decode_flate(
 }
 
 
+typedef struct _decoder_t
+{
+    const char *name;
+    decode_exit_e (*do_decode)(decode_t *decode, iter_t *itr, size_t length);
+} decoder_t;
+
+static decoder_t decoders[] = 
+{
+    {"FlateDecode", decode_flate},
+};
+static const int n_decoders = 1;
+
+
+/* Given a page object, figure out how it is decoded and call the proper decode
+ * routine on it.
+ */
+static int find_and_decode(obj_t obj, decode_t *decode)
+{
+    int i;
+    size_t pg_length;
+    char name[32] = {0};
+    iter_t *itr = iter_new(decode->pdf);
+    
+    /* Get the pages data */
+    if (!find_in_object(itr, obj, "/Length"))
+    {
+        iter_destroy(itr);
+        return PDF_ERR; /* Could not find length of the pages data */
+    }
+    seek_next_nonwhitespace(itr);
+    pg_length = ITR_VAL_INT(itr);
+    D("Decoding page %d (%lu bytes)", decode->pg_num, pg_length);
+
+    /* Locate the Filter type (e.g. FlateDecode) */
+    if (!find_in_object(itr, obj, "/Filter"))
+    {
+        iter_destroy(itr);
+        return PDF_ERR;
+    }
+    seek_next(itr, '/');
+
+    /* Get the Filte name */
+    while (i<sizeof(name)-1 && isalnum(ITR_VAL(itr)))
+    {
+        name[++i] = ITR_VAL(itr);
+        iter_next(itr);
+    }
+
+    /* Get the start of the stream */
+    seek_string(itr, "stream");
+    seek_next(itr, '\n');
+
+    /* Look through all decoders until we find the corresponding one */
+    for (i=0; i<n_decoders; ++i)
+      if (strncmp(decoders[i].name, name, strlen(name)) == 0)
+      {
+          if (decoders[i].do_decode(decode, itr, pg_length) == DECODE_DONE)
+          {
+              iter_destroy(itr);
+              return PDF_OK;
+          }
+      }
+
+    iter_destroy(itr);
+    return PDF_ERR; /* Could not locate decoder */
+}
+
+
 int pdf_decode_page(decode_t *decode)
 {
     const kid_t *k;
-    off_t pg_length, stream_start;
     obj_t obj;
     iter_t *itr = iter_new(decode->pdf);
 
@@ -186,28 +253,7 @@ int pdf_decode_page(decode_t *decode)
     seek_next_nonwhitespace(itr);
     if (!pdf_get_object(decode->pdf, ITR_VAL_INT(itr), &obj))
       return PDF_ERR; /* Could not locate page */
-
-    /* Get the pages data */
-    if (!find_in_object(itr, obj, "/Length"))
-      return PDF_ERR; /* Could not find length of the pages data */
-    seek_next_nonwhitespace(itr);
-    pg_length = ITR_VAL_INT(itr);
-    D("Decoding page %d (%lu bytes)", decode->pg_num, pg_length);
-
-    /* Get beginning of stream */
-    seek_string(itr, "stream");
-    seek_next(itr, '\n');
-    iter_next(itr);
-    stream_start = ITR_POS(itr);
-
+    
     /* Decode the data */
-    if (find_in_object(itr, obj, "/Filter"))
-      if (find_in_object(itr, obj, "/FlateDecode"))
-      {
-          iter_set(itr, stream_start);
-          if (decode_flate(itr, pg_length, decode) == DECODE_DONE)
-            return PDF_OK;
-      }
-
-    return PDF_OK;
+    return find_and_decode(obj, decode);
 }
