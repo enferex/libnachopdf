@@ -116,7 +116,7 @@ void seek_next_nonwhitespace(iter_t *itr)
 }
 
 
-/* Creates a fresh object */
+/* Creates a fresh object from "<<" to ">>" */
 _Bool pdf_get_object(const pdf_t *pdf, off_t obj_id, obj_t *obj)
 {
     int i;
@@ -145,6 +145,9 @@ _Bool pdf_get_object(const pdf_t *pdf, off_t obj_id, obj_t *obj)
     seek_string(itr, "<<");
     obj->begin = ITR_POS(itr);
     seek_string(itr, ">>");
+    seek_string(itr, "endobj");
+    seek_prev(itr, '>'); /* Second '>' in ">>" */
+    iter_prev(itr);      /* First  '>' in ">>" */
     obj->end = ITR_POS(itr);
     obj->id = obj_id;
     iter_destroy(itr);
