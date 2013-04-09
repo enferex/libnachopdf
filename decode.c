@@ -63,7 +63,7 @@ static decode_exit_e decode_ps(
             ++i;
             while (data[i] != ')')
             {
-                if (cb_if_full(decode, &bufidx))
+                if (cb_if_full(decode, &bufidx) == DECODE_DONE)
                   return DECODE_DONE;
                 buf[bufidx++] = data[i];
                 ++i;
