@@ -327,7 +327,7 @@ static int get_xref(pdf_t *pdf, iter_t *itr)
 
     /* Find /Prev */
     iter_set(itr, trailer);
-    if (seek_string(itr, "/Prev") != -1)
+    if (seek_string(itr, "/Prev"))
     {
         seek_next_nonwhitespace(itr);
         iter_set(itr, ITR_VAL_INT(itr));
