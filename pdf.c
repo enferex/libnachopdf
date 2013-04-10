@@ -238,6 +238,9 @@ static _Bool pages_from_parent(pdf_t *pdf, obj_t obj)
     {
         /* Get decendents */
         iter_next(itr);
+        skip_whitespace(itr);
+        if (ITR_VAL(itr) == ']')
+          break;
         next_id = ITR_VAL_INT(itr);
         seek_next_nonwhitespace(itr); /* Skip version */
         seek_next_nonwhitespace(itr); /* Skip ref     */
@@ -295,7 +298,7 @@ static int get_xref(pdf_t *pdf, iter_t *itr)
     first_obj = ITR_VAL_INT(itr);
     seek_next(itr, ' ');
     n_entries = ITR_VAL_INT(itr);
-    D("xref starts at object %llu and contains %llu entries",
+    D("xref starts at object %lu and contains %lu entries",
       first_obj, n_entries);
 
     /* Create a blank xref */
@@ -337,7 +340,7 @@ static int get_xref(pdf_t *pdf, iter_t *itr)
       return PDF_ERR;
     seek_next_nonwhitespace(itr);
     xref->root_obj = ITR_VAL_INT(itr);
-    D("Document root located at %llu", xref->root_obj);
+    D("Document root located at %lu", xref->root_obj);
 
     /* Find /Prev */
     iter_set(itr, trailer);
@@ -363,7 +366,7 @@ static int get_xrefs(pdf_t *pdf)
     seek_prev(itr, '%');
     seek_previous_line(itr); /* Get xref offset */
     xref = ITR_VAL_INT(itr);
-    D("Initial xref table located at offset %llu", xref);
+    D("Initial xref table located at offset %lu", xref);
 
     /* Get xref */
     iter_set(itr, xref);
