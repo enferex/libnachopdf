@@ -1,19 +1,28 @@
 #ifndef __PDF_H_INCLUDE
 #include <stdio.h>
+#include <unistd.h>
 
 
-#define TAG      "pdf"
+#define TAG      "libnahcopdf"
 #define PDF_ERR -1
 #define PDF_OK   0
 
 
 #ifdef DEBUG_PDF
 #define D(...) \
-    do {fprintf(stderr,TAG"[debug]" __VA_ARGS__); putc('\n',stderr);} while(0)
+    do{fprintf(stderr,"["TAG"][debug] "__VA_ARGS__);putc('\n',stderr);}while(0)
 #else
 #define D(...)
 #endif
 
+
+#undef ERR
+#define ERR(_expr, _fail, ...) \
+    if ((_expr) _fail) {                    \
+        fprintf(stderr, "["TAG"] Error: " __VA_ARGS__);\
+        fputc('\n', stderr); \
+        exit(EXIT_FAILURE);\
+    }
 
 
 /* Use this for all offsets */

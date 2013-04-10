@@ -3,11 +3,6 @@
 #include <stdlib.h>
 #include <stdbool.h>
 #include <errno.h>
-#include <fcntl.h>
-#include <unistd.h>
-#include <sys/mman.h>
-#include <sys/stat.h>
-#include <sys/types.h>
 
 #include <regex.h>
 #include "pdf.h"
@@ -110,13 +105,12 @@ static void debug_page(const pdf_t *pdf, int pg_num)
 
 int main(int argc, char **argv)
 {
-    int i, fd;
+    int i;
 #ifdef DEBUG
     int debug_page_num = 0;
 #endif
-    pdf_t pdf;
+    pdf_t *pdf;
     regex_t re;
-    struct stat stat;
     const char *fname = NULL, *expr = NULL;
 
     for (i=1; i<argc; ++i)
@@ -152,25 +146,14 @@ int main(int argc, char **argv)
         "Could not build regex");
    
     /* New pdf */ 
-    memset(&pdf, 0, sizeof(pdf_t));
-    pdf.fname = fname;
-
-    /* Open and map the file into memory */
-    ERR((fd = open(fname, O_RDONLY)), ==-1, "Opening file '%s'", fname);
-    ERR(fstat(fd, &stat), ==-1, "Obtaining file size");
-    ERR((pdf.data=mmap(NULL, stat.st_size, PROT_READ, MAP_PRIVATE, fd, 0)),==NULL,
-        "Mapping file into memory");
-    pdf.len = stat.st_size;
-
-    /* Get the initial cross reference table */
-    ERR(pdf_load_data(&pdf), != PDF_OK, "Could not load pdf");
+    pdf = pdf_new(fname);
 
     /* Run the match routine */
-    run_regex(&pdf, &re);
+    run_regex(pdf, &re);
 
 #ifdef DEBUG
     if (debug_page_num)
-      debug_page(&pdf, debug_page_num);
+      debug_page(pdf, debug_page_num);
 #endif
 
 #if 0
@@ -178,8 +161,7 @@ int main(int argc, char **argv)
 #endif
 
     /* Clean up */
-    close(fd);
+    pdf_destroy(pdf);
     regfree(&re);
-
     return 0;
 }

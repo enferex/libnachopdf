@@ -1,7 +1,12 @@
+#include <stdio.h>
 #include <stdlib.h>
 #include <stdbool.h>
 #include <string.h>
 #include <ctype.h>
+#include <fcntl.h>
+#include <sys/mman.h>
+#include <sys/stat.h>
+#include <sys/types.h>
 #include "pdf.h"
 
 
@@ -421,10 +426,9 @@ void pdf_destroy(pdf_t *pdf)
     int i;
     for (i=0; i<pdf->n_xrefs; ++i)
     {
-        for (j=0; j<pdf->xref[i]->n_entries; ++j)
-          free(pdf->xrefs[i]->entries[j];
+        free(pdf->xrefs[i]->entries);
         free(pdf->xrefs[i]);
     }
-    munmap(pdf->data, pdf->len);
+    munmap((void *)pdf->data, pdf->len);
     free(pdf);
 }
