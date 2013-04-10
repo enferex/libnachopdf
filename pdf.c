@@ -104,15 +104,21 @@ _Bool seek_string(iter_t *itr, const char *search)
 }
 
 
+void skip_whitespace(iter_t *itr)
+{
+    while (isspace(ITR_VAL(itr)) && ITR_IN_BOUNDS_V(itr, 1))
+      iter_next(itr);
+}
+
+
 /* Locate the first whitespace character and seek to the first character of the
- * whitespace
+ * whitespace.
  */
 void seek_next_nonwhitespace(iter_t *itr)
 {
     while (!isspace(ITR_VAL(itr)) && ITR_IN_BOUNDS_V(itr, 1))
       iter_next(itr);
-    while (isspace(ITR_VAL(itr)) && ITR_IN_BOUNDS_V(itr, 1))
-      iter_next(itr);
+    skip_whitespace(itr);
 }
 
 
@@ -389,7 +395,36 @@ int pdf_load_data(pdf_t *pdf)
 
 pdf_t *pdf_new(const char *fname)
 {
-    pdf_t *pdf = calloc(1, sizeof(pdf_t));
+    int fd;
+    struct stat stat;
+    pdf_t *pdf;
+   
+    pdf = calloc(1, sizeof(pdf_t));
     pdf->fname = fname;
+
+    /* Open and map the file into memory */
+    ERR((fd = open(fname, O_RDONLY)), ==-1, "Opening file '%s'", fname);
+    ERR(fstat(fd, &stat), ==-1, "Obtaining file size");
+    ERR((pdf->data=mmap(
+         NULL, stat.st_size, PROT_READ, MAP_PRIVATE, fd, 0)),==NULL,
+        "Mapping file into memory");
+    pdf->len = stat.st_size;
+
+    /* Get the initial cross reference table */
+    ERR(pdf_load_data(pdf), != PDF_OK, "Could not load pdf");
     return pdf;
+}
+
+
+void pdf_destroy(pdf_t *pdf)
+{
+    int i;
+    for (i=0; i<pdf->n_xrefs; ++i)
+    {
+        for (j=0; j<pdf->xref[i]->n_entries; ++j)
+          free(pdf->xrefs[i]->entries[j];
+        free(pdf->xrefs[i]);
+    }
+    munmap(pdf->data, pdf->len);
+    free(pdf);
 }

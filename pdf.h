@@ -107,7 +107,7 @@ typedef struct _decode_t
 } decode_t;
 
 
-/* Allocate or destroy a PDF instance (this does not load any data) */
+/* Allocate or destroy a PDF instance (this does loads the pdf) */
 extern pdf_t *pdf_new(const char *filename);
 extern void pdf_destroy(pdf_t *pdf);
 
@@ -166,6 +166,12 @@ extern void seek_prev(iter_t *itr, char search);
  * Calling this funtcion will advance 'itr' to point to the 'b' in baz.
  */
 extern void seek_next_nonwhitespace(iter_t *itr);
+
+
+/* If the character at 'itr' is whitespace, itr will be advanced past it, else
+ * nothing happens.
+ */
+extern void skip_whitespace(iter_t *itr);
 
 
 /* Find the previous or next line in a pdf starting at iter.
