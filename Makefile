@@ -18,7 +18,10 @@ $(LIB): $(LIBOBJS)
 
 test: $(APP)
 	LD_LIBRARY_PATH=$(LD_LIBRARY_PATH):. \
-	./$(APP) -e "foo" test.pdf -d 1
+	./$(APP) -e "foo" test.pdf
+
+titlesucker: titlesucker.c $(LIB)
+	$(CC) -o $@ $^ $(CFLAGS) -lz
 
 debug: $(APP)
 	LD_LIBRARY_PATH=$(LD_LIBRARY_PATH):. \

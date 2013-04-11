@@ -32,7 +32,7 @@ static decode_exit_e decode_ps(
 {
     unsigned char c;
     off_t i=0, stack_idx=0;
-    double Tc=0.0, val_stack[2] = {0.0, 0.0};
+    double Tc=0.0, val_stack[6]={0.0}, Tm[6]={0.0};
     static const int X=0, Y=1;
     size_t bufidx = 0;
     char *buf = decode->buffer;
@@ -90,6 +90,8 @@ static decode_exit_e decode_ps(
                 else if (Tc>=0.0 && val_stack[X]>0.0)
                   buf[bufidx++] = ' ';
             }
+            else if (c == 'm')
+              memcpy(Tm, val_stack, sizeof(Tm));
             else if (c == 'c')
               Tc = val_stack[X];
             val_stack[0] = val_stack[1] = 0.0;
