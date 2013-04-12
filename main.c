@@ -44,6 +44,7 @@ static void usage(const char *execname)
 /* Gets called back from the decode routine when the buffer is full */
 static decode_exit_e regexp_callback(decode_t *decode)
 {
+    char *en, last_line[2048] = {0};
     int match = regexec(
         (regex_t*)decode->user_data, decode->buffer, 0, NULL, 0);
 
@@ -52,6 +53,18 @@ static decode_exit_e regexp_callback(decode_t *decode)
         P("%s: Found match on page %d", decode->pdf->fname, decode->pg_num);
         return DECODE_DONE;
     }
+
+    /* Save last line */
+    if (strrchr(decode->buffer, '\n'))
+    {
+        en = strrchr(decode->buffer, '\n') + 1;
+        strncpy(last_line, en, strlen(en));
+    }
+
+    /* Continue adding character to the end of the last line */
+    strncpy(decode->buffer, last_line, strlen(last_line));
+    decode->buffer[strlen(last_line)] = '\0';
+    decode->buffer_used = strlen(decode->buffer);
 
     return DECODE_CONTINUE;
 }
@@ -66,7 +79,7 @@ static void run_regex(const pdf_t *pdf, const regex_t *re)
     decode.pdf = pdf;
     decode.callback = regexp_callback;
     decode.buffer = buf;
-    decode.buffer_length = sizeof(buf);
+    decode.buffer_length = sizeof(buf) - 1;
     decode.user_data = (void *)re;
 
     for (kid=pdf->kids; kid; kid=kid->next)

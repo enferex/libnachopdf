@@ -13,7 +13,7 @@
  */
 static decode_exit_e cb_if_full(decode_t *decode, size_t *buf_idx)
 {
-    if (*buf_idx > decode->buffer_length)
+    if (*buf_idx >= decode->buffer_length)
     {
         decode->buffer_used = *buf_idx;
         if ((decode->callback(decode)) == DECODE_DONE)
