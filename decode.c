@@ -1,7 +1,9 @@
 #include <stdlib.h>
+#include <stdbool.h>
 #include <string.h>
 #include <ctype.h>
 #include <zlib.h>
+#include <math.h>
 #include "pdf.h"
 
 
@@ -25,31 +27,60 @@ static decode_exit_e cb_if_full(decode_t *decode, size_t *buf_idx)
 }
 
 
+typedef struct 
+{
+    unsigned short next_top;
+#define MAX_STACK_VALS 32
+    double vals[MAX_STACK_VALS]; /* 0 is the bottom, 32 is the top */
+} stack_t;
+
+
+static inline void stack_push(stack_t *stack, double val)
+{
+    stack->vals[stack->next_top++ % MAX_STACK_VALS] = val;
+}
+
+
+static inline double stack_pop(stack_t *stack)
+{
+    return stack->vals[--stack->next_top % MAX_STACK_VALS];
+}
+
+
 static decode_exit_e decode_ps(
     unsigned char *data,
     off_t          length,
     decode_t      *decode)
 {
+#define TX 4 /* a,b,c,d,e,f from Tm, tx is 'e' */
+    int v;
+    _Bool in_array;
     unsigned char c;
-    off_t i=0, stack_idx=0;
-    double Tc=0.0, val_stack[6]={0.0}, Tm[6]={0.0};
-    static const int X=0, Y=1;
+    off_t i=0;
+    double val, Tm[6]={0.0};
+    double Tc, Tj, Tf, Tfs, Th, Tw, last_tx;
     size_t bufidx = 0;
     char *buf = decode->buffer;
+    stack_t vals;
 
 #ifdef DEBUG_PS
     for (i=0; i<length; ++i)
       putc(data[i], stdout);
 #endif
 
+    /* Initialize */
+    memset(&vals, 0, sizeof(stack_t));
+    val = Tc = Tj = Tf = Tw = last_tx = 0.0;
     i = 0;
+    in_array = false;
+
+    /* Parse... */
     while (i < length)
     {
         /* If we have filled the buffer... callback */
         if (cb_if_full(decode, &bufidx) == DECODE_DONE)
           return DECODE_DONE;
 
-        /* Parse... */
         c = data[i];
         if (isspace(c))
         {
@@ -57,9 +88,20 @@ static decode_exit_e decode_ps(
             continue;
         }
 
+        /* Array, really for just handling TJ operator */
+        if (c == '[')
+        {
+            in_array = true;
+            last_tx = Tm[TX];
+        }
+        else if (c == ']')
+          in_array = false;
+
         /* Text to display */
         if (c == '(')
         {
+            if (Tm[TX] - last_tx > 0.1)
+              buf[bufidx++] = ' ';
             ++i;
             while (data[i] != ')')
             {
@@ -73,29 +115,43 @@ static decode_exit_e decode_ps(
         /* Position value */
         else if (isdigit(c) || c == '-')
         {
-            val_stack[stack_idx++%2] = atof((char *)data + i);
+            stack_push(&vals, atof((char *)data + i));
             while (isdigit(data[i]) || data[i] == '.' || data[i] == '-')
               ++i;
+
+            if (in_array)
+            {
+                Tfs = Tm[3];
+                Th = Tm[0] / Tfs;
+                Tj = stack_pop(&vals);
+                last_tx = Tm[TX];
+                Tm[TX] = (-(Tj / 1000.0) * Tfs + Tc + Tw) * Th;
+            }
         }
 
         /* New line (skip other display options like Tf and Tj */
         else if (c == 'T') 
         {
             c = data[++i];
+
             /* Newline (or space) */
             if ((c=='D' || c=='d' || c=='*'))
             {
-                if (val_stack[Y] != 0.0)
+                val = stack_pop(&vals);
+                if (val != 0.0)
                   buf[bufidx++] = '\n';
-                else if (Tc>=0.0 && val_stack[X]>0.0)
-                  buf[bufidx++] = ' ';
             }
-            else if (c == 'm')
-              memcpy(Tm, val_stack, sizeof(Tm));
+            else if (c == 'm') /* Tm */
+            {
+                for (v=6; v>0; --v)
+                  Tm[v-1] = stack_pop(&vals);
+            }
             else if (c == 'c')
-              Tc = val_stack[X];
-            val_stack[0] = val_stack[1] = 0.0;
-            stack_idx = 0;
+              Tc = stack_pop(&vals);
+            else if (c == 'w')
+              Tw = stack_pop(&vals);
+            else
+              stack_pop(&vals);
         }
 
         /* New line */
