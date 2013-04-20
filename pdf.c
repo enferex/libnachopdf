@@ -188,9 +188,10 @@ _Bool find_in_object(iter_t *itr, obj_t obj, const char *search)
 
 static void add_kid(pdf_t *pdf, obj_t kid)
 {
-    kid_t *tmp, *new_kid;
+    kid_t *new_kid;
     static int pg_num_pool;
     iter_t *itr = iter_new(pdf);
+    static kid_t *last;
 
     if (!find_in_object(itr, kid, "/Page"))
     {
@@ -201,9 +202,14 @@ static void add_kid(pdf_t *pdf, obj_t kid)
     new_kid = malloc(sizeof(kid_t));
     new_kid->pg_num = ++pg_num_pool;
     new_kid->id = kid.id;
-    tmp = pdf->kids;
-    pdf->kids = new_kid;
-    new_kid->next = tmp;
+
+    if (last)
+      last->next = new_kid;
+    last = new_kid;
+
+    if (!pdf->kids)
+      pdf->kids = new_kid;
+
     iter_destroy(itr);
 }
 
