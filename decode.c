@@ -109,6 +109,8 @@ static decode_exit_e decode_ps(
                   return DECODE_DONE;
                 buf[bufidx++] = data[i];
                 ++i;
+                if (i > length)
+                  break;
             }
         }
 
