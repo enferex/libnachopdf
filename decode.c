@@ -135,7 +135,9 @@ static decode_exit_e decode_ps(
             c = data[++i];
 
             /* Newline (or space) */
-            if ((c=='D' || c=='d' || c=='*'))
+            if (c == '*')
+              buf[bufidx++] = '\n';
+            else if ((c=='D' || c=='d'))
             {
                 val = stack_pop(&vals);
                 if (val != 0.0)
