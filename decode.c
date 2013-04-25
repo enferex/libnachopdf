@@ -105,8 +105,9 @@ static decode_exit_e decode_ps(
         /* Text to display */
         if (c == '(')
         {
-            if (Tm[TX] - last_tx > 0.1)
-              buf[bufidx++] = ' ';
+            /* TODO figure out a better way to calculate spacing */
+            //if (Tm[TX] - last_tx > 0.2) /* How to calc a proper space? */
+            //  buf[bufidx++] = ' ';
             ++i;
             while (data[i] != ')')
             {
