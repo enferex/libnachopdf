@@ -54,11 +54,12 @@ static decode_exit_e decode_ps(
 {
 #define TX 4 /* a,b,c,d,e,f from Tm, tx is 'e' */
     int v;
-    _Bool in_array;
     unsigned char c;
     off_t i=0;
-    static double val, Tm[6]={0.0};
-    static double Tc, Tj, Tf, Tfs, Th, Tw, last_tx;
+    static _Bool in_array;
+    static double val, Tm[6] = {0.0};
+    static double Tc, Tj, Tfs, Th, Tw, last_tx;
+    static int last_pg_num = -1;
     size_t bufidx = decode->buffer_used;
     char *buf = decode->buffer;
     stack_t vals;
@@ -66,11 +67,17 @@ static decode_exit_e decode_ps(
 #ifdef DEBUG_PS
     for (i=0; i<length; ++i)
       putc(data[i], stdout);
+    i = 0;
 #endif
 
-    /* Initialize */
-    i = 0;
-    in_array = false;
+    /* Initialize (if we hit a new page) */
+    if (last_pg_num != decode->pg_num)
+    {
+        in_array = false;
+        memset(Tm, 0, sizeof(Tm));
+        Tc = Tj = Tfs = Th = Tw = last_tx = 0.0;
+        last_pg_num = decode->pg_num;
+    }
 
     /* Parse... */
     while (i < length)
