@@ -57,9 +57,9 @@ static decode_exit_e decode_ps(
     _Bool in_array;
     unsigned char c;
     off_t i=0;
-    double val, Tm[6]={0.0};
-    double Tc, Tj, Tf, Tfs, Th, Tw, last_tx;
-    size_t bufidx = 0;
+    static double val, Tm[6]={0.0};
+    static double Tc, Tj, Tf, Tfs, Th, Tw, last_tx;
+    size_t bufidx = decode->buffer_used;
     char *buf = decode->buffer;
     stack_t vals;
 
@@ -69,8 +69,6 @@ static decode_exit_e decode_ps(
 #endif
 
     /* Initialize */
-    memset(&vals, 0, sizeof(stack_t));
-    val = Tc = Tj = Tf = Tw = last_tx = 0.0;
     i = 0;
     in_array = false;
 
