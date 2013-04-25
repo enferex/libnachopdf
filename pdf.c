@@ -199,7 +199,7 @@ static void add_kid(pdf_t *pdf, obj_t kid)
         return;
     }
 
-    new_kid = malloc(sizeof(kid_t));
+    new_kid = calloc(1, sizeof(kid_t));
     new_kid->pg_num = ++pg_num_pool;
     new_kid->id = kid.id;
 
