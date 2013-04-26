@@ -121,12 +121,13 @@ static void debug_page(const pdf_t *pdf, int pg_num)
 
 int main(int argc, char **argv)
 {
-    int i;
+    int i, re_idx;
 #ifdef DEBUG
     int debug_page_num = 0;
 #endif
     pdf_t *pdf;
     regex_t re;
+    char regex[1024] = {0};
     const char *fname = NULL, *expr = NULL;
 
     for (i=1; i<argc; ++i)
@@ -154,11 +155,17 @@ int main(int argc, char **argv)
     if (!fname || !expr)
       usage(argv[0]);
 
+    /* Remove spaces for regex and test length */
+    ERR(strlen(expr), >= sizeof(regex), "Regex is too long... sorry")
+    for (i=0, re_idx=0; i<strlen(expr); ++i)
+      if (expr[i] != ' ')
+        regex[re_idx++] = expr[i];
+
     D("File: %s", fname);
-    D("Expr: %s", expr);
+    D("Expr: %s", regex);
 
     /* Build regex */
-    ERR(regcomp(&re, expr, REG_EXTENDED), !=0,
+    ERR(regcomp(&re, regex, REG_EXTENDED), !=0,
         "Could not build regex");
    
     /* New pdf */ 
