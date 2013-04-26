@@ -3,7 +3,7 @@ OBJS = main.o
 CFLAGS = -g3 -O0 -Wall -pedantic -std=c99 -fPIC -DDEBUG -DDEBUG_PDF
 LIBNAME = nachopdf
 LIBOBJS = pdf.o decode.o
-LIB = lib$(LIBNAME).so
+LIB = lib$(LIBNAME).a
 
 all: $(OBJS) $(APP) $(LIB)
 
@@ -14,11 +14,11 @@ $(APP): $(OBJS) $(LIB)
 	$(CC) $(OBJS) $(CFLAGS) $(EXTRA_CFLAGS) -L. -l$(LIBNAME) -lz -o $@ 
 
 $(LIB): $(LIBOBJS)
-	$(CC) $(LIBOBJS) $(CFLAGS) -fPIC -shared -o $@
+	$(AR) cr $@ $(LIBOBJS)
 
 test: $(APP)
 	LD_LIBRARY_PATH=$(LD_LIBRARY_PATH):. \
-	./$(APP) -e "foo" test.pdf
+	./$(APP) -e "foo" test.pdf -d 1
 
 titlesucker: titlesucker.c $(LIB)
 	$(CC) -o $@ $^ $(CFLAGS) -lz
