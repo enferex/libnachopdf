@@ -80,7 +80,7 @@ static decode_exit_e decode_ps(
     }
 
     /* Parse... */
-    while (i < length)
+    for ( ; i < length; ++i)
     {
         /* If we have filled the buffer... callback */
         if (cb_if_full(decode, &bufidx) == DECODE_DONE)
@@ -88,10 +88,7 @@ static decode_exit_e decode_ps(
 
         c = data[i];
         if (isspace(c))
-        {
-            i++;
-            continue;
-        }
+          continue;
 
         /* Array, really for just handling TJ operator */
         if (c == '[')
@@ -126,6 +123,7 @@ static decode_exit_e decode_ps(
             stack_push(&vals, atof((char *)data + i));
             while (isdigit(data[i]) || data[i] == '.' || data[i] == '-')
               ++i;
+            --i; /* Place i at the most recent (last number) character */
 
             if (in_array)
             {
@@ -167,9 +165,6 @@ static decode_exit_e decode_ps(
         /* New line */
         else if (c == '\'' || c == '"')
           buf[bufidx++] = '\n';
-
-        else
-          ++i;
     }
 
     /* Done decoding call the callback */
