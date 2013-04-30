@@ -164,7 +164,11 @@ _Bool pdf_get_object(const pdf_t *pdf, off_t obj_id, obj_t *obj)
         if (obj_id >= xref->first_entry_id && 
             obj_id < xref->first_entry_id + xref->n_entries)
           break;
+        xref = NULL;
     }
+
+    if (!xref)
+      return false;
 
     /* Create an object between "<<" and ">>" */
     idx = obj_id - xref->first_entry_id;

@@ -1,0 +1,41 @@
+pdfgrep
+=======
+PDFgrep takes a PDF and regular expression as input and tries to locate a match
+within the PDF.  If a match is found, the page number from which it occurs is
+reported to the user.
+
+
+libnachopdf
+===========
+libnachopdf (Not 'yo PDF) is a library for extracting text from a PDF.  This
+library is quite limited and incomplete.  Currently it can decompress
+FlateDecode (zlib) text streams and it has a basic PS interpreter to decode text
+from PS encoded streams.
+
+
+Caveat/Warning
+==============
+Unfortunately the detection of spacing between words is lacking in libnachopdf.
+Therefore, since pdfgrep is based on this library spaces are ignored.  Hey, it's
+a work in progress.
+
+
+Building
+========
+Building is simple (no config is provided), just run the following:
+>     make pdfgrep
+
+If you just want to build the library:
+>     make libnachopdf
+
+
+Installing
+==========
+This project is still alpha, build and then copy the binary (and or library)
+whereever you wish.
+
+
+Contact
+=======
+Matt Davis (enferex)
+mattdavis9@gmail.com

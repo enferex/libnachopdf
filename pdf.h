@@ -30,6 +30,9 @@
 #define PDF_OK   0
 
 
+static const char _libnachopdf_version[] = "0.1"; /* Alpha */
+
+
 #ifdef DEBUG_PDF
 #define D(...) \
     do{fprintf(stderr,"["TAG"][debug] "__VA_ARGS__);putc('\n',stderr);}while(0)

@@ -35,12 +35,15 @@
 #define TAG "pdfgrep"
 
 
+/* Output */
 #define _P(_tag, ...) \
     do {printf("["TAG"]"_tag" "__VA_ARGS__); putc('\n', stdout);} while(0)
 
 
 #define P(...) do {printf(__VA_ARGS__); putc('\n', stdout);} while(0)
 
+
+/* Debugging */
 #undef D
 #ifdef DEBUG
 #define D(...) _P("[debug]", __VA_ARGS__);
@@ -49,12 +52,16 @@
 #endif
 
 
+/* Error reporting */
 #define ERR(_expr, _fail, ...) \
     if ((_expr) _fail) {                    \
         fprintf(stderr, "["TAG"] Error: " __VA_ARGS__);\
         fputc('\n', stderr); \
         exit(EXIT_FAILURE);\
     }
+
+
+static const char _pdfgrep_version[] = "0.1"; /* Alpha */
 
 
 static void usage(const char *execname)
