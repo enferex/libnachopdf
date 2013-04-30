@@ -52,6 +52,7 @@ static const char _libnachopdf_version[] = "0.1"; /* Alpha */
 
 /* Use this for all offsets */
 #ifndef __off_t_defined
+#undef off_t
 typedef unsigned long long off_t;
 #endif
 
