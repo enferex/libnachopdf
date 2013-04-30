@@ -1,6 +1,7 @@
 APP = pdfgrep
 OBJS = main.o
-CFLAGS = -g3 -O0 -Wall -pedantic -std=c99 -fPIC -DDEBUG -DDEBUG_PDF
+DEBUG = -DDEBUG -DDEBUG_PDF
+CFLAGS = -g3 -O0 -Wall -pedantic -std=c99 -fPIC
 LIB_PLAIN_NAME = nachopdf
 LIBNAME = lib$(LIB_PLAIN_NAME)
 LIBOBJS = pdf.o decode.o

@@ -124,6 +124,7 @@ static void run_regex(const pdf_t *pdf, const regex_t *re)
 }
 
 
+#ifdef DEBUG
 static decode_exit_e print_buffer_callback(decode_t *decode)
 {
     printf(decode->buffer);
@@ -131,8 +132,10 @@ static decode_exit_e print_buffer_callback(decode_t *decode)
     decode->buffer_used = 0;
     return DECODE_CONTINUE;
 }
+#endif /* DEBUG */
 
 
+#ifdef DEBUG
 static void debug_page(const pdf_t *pdf, int pg_num)
 {
     decode_t decode;
@@ -147,6 +150,7 @@ static void debug_page(const pdf_t *pdf, int pg_num)
     decode.user_data = NULL;
     pdf_decode_page(&decode);
 }
+#endif /* DEBUG */
 
 
 int main(int argc, char **argv)
