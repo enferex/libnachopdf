@@ -8,10 +8,10 @@ from PS encoded streams.
 
 pdfsearch
 =======
-PDFsearch is utility built upon libnachopdf.  This can serve as an example of of
+PDFsearch is a utility built upon libnachopdf.  This can serve as an example of
 using libnachopdf.  PDFsearch takes a PDF and regular expression as input and
 tries to locate a match within the PDF.  If a match is found, the page number
-from which it occurs is reported to the user.  Why not call it 'PDFgrep?'  We'll
+from which it occurs is reported to the user.  Why not call it 'PDFgrep?' Well,
 that name is taken.
 
 
