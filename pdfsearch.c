@@ -1,23 +1,23 @@
 /******************************************************************************
  * main.c
  *
- * pdfgrep - Search PDF text-contents from shell
+ * pdfsearch - Search PDF text-contents from shell
  *
  * Copyright (C) 2013, Matt Davis (enferex)
  *
- * This file is part of pdfgrep.
- * pdfgrep is free software: you can redistribute it and/or modify
+ * This file is part of pdfsearch.
+ * pdfsearch is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation, either version 2 of the License, or
  * (at your option) any later version.
  *
- * pdfgrep is distributed in the hope that it will be useful,
+ * pdfsearch is distributed in the hope that it will be useful,
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  *
  * You should have received a copy of the GNU General Public License
- * along with pdfgrep.  If not, see <http://www.gnu.org/licenses/>.
+ * along with pdfsearch.  If not, see <http://www.gnu.org/licenses/>.
  *****************************************************************************/
 
 
@@ -32,7 +32,7 @@
 
 
 #undef TAG
-#define TAG "pdfgrep"
+#define TAG "pdfsearch"
 
 
 /* Output */
@@ -61,7 +61,7 @@
     }
 
 
-static const char _pdfgrep_version[] = "0.1"; /* Alpha */
+static const char _pdfsearch_version[] = "0.1"; /* Alpha */
 
 
 static void usage(const char *execname)

@@ -1,5 +1,5 @@
-APP = pdfgrep
-OBJS = main.o
+APP = pdfsearch
+OBJS = pdfsearch.o
 DEBUG = -DDEBUG -DDEBUG_PDF
 CFLAGS = -g3 -O0 -Wall -pedantic -std=c99 -fPIC
 LIB_PLAIN_NAME = nachopdf
